@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Panel Docente | Repositorio Académico</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">RA</div>
+      <div>
+        <div class="brand-title">Docente</div>
+        <div class="brand-sub">Cursos • Estudiantes • Calificación</div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
+      <button id="navCursos" onclick="show('cursos')">Mis cursos</button>
+      <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search">
+        <span style="color:var(--muted)">🔎</span>
+        <input id="q" placeholder="Buscar estudiante / proyecto..." oninput="renderTabla()">
+      </div>
+      <div class="pill">📚 Docente</div>
+      <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section id="home">
+      <div class="grid">
+        <div class="card col-4">
+          <h3>Cursos asignados</h3>
+          <div class="kpi" id="kpiCursos">—</div>
+          <div class="hint">En el sistema</div>
+        </div>
+
+        <div class="card col-4">
+          <h3>Estudiantes (curso actual)</h3>
+          <div class="kpi" id="kpiEst">—</div>
+          <div class="hint">Mostrados</div>
+        </div>
+
+        <div class="card col-4">
+          <h3>Con archivo final</h3>
+          <div class="kpi" id="kpiFiles">—</div>
+          <div class="hint">Listos para revisar</div>
+        </div>
+
+        <div class="card col-12">
+          <h3>Acceso rápido</h3>
+          <div style="color:var(--muted); font-size:13px;">
+            Ve a <b>“Mis cursos”</b>, selecciona un curso, revisa archivos finales y califica.
+          </div>
+          <div style="height:10px"></div>
+          <button class="btn" onclick="show('cursos')">Ir a Mis cursos</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIS CURSOS -->
+    <section id="cursos" style="display:none;">
+      <div class="grid">
+        <div class="card col-4">
+          <h3>Seleccionar curso</h3>
+
+          <label style="font-size:13px; color:var(--muted);">Curso</label>
+          <select class="input" id="cursoSel" onchange="cargarCurso()"></select>
+
+          <div style="height:10px"></div>
+          <div id="cursoInfo" style="color:var(--muted); font-size:13px;"></div>
+
+          <div style="height:12px"></div>
+          <button class="btn" onclick="cargarCurso()">Actualizar</button>
+        </div>
+
+        <div class="card col-8">
+          <h3>Estudiantes del curso</h3>
+          <div style="color:var(--muted); font-size:13px;">
+            Puedes ver el archivo final y calificar. La nota se puede editar (se guarda con update).
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div style="overflow:auto;">
+            <table class="table" id="tblEst">
+              <thead>
+                <tr>
+                  <th>Estudiante</th>
+                  <th>Proyecto</th>
+                  <th>Estado</th>
+                  <th>Archivo final</th>
+                  <th style="min-width:240px;">Calificar</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div style="height:10px"></div>
+          <div id="hint" style="color:var(--muted); font-size:12px;"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toastBox">
+  <strong id="toastTitle">Aviso</strong>
+  <p id="toastMsg"></p>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script>initTheme();</script>
+<script>
+requireAuth('docente');
+
+let cache = {
+  cursos: [],
+  cursoActual: null,
+  estudiantes: []
+};
+
+function setActive(btnId){
+  ['navHome','navCursos'].forEach(id=>$(id).classList.remove('active'));
+  $(btnId).classList.add('active');
+}
+function show(section){
+  ['home','cursos'].forEach(s=>$(s).style.display='none');
+  $(section).style.display='block';
+  setActive(section==='home'?'navHome':'navCursos');
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+async function loadCursos(){
+  try{
+    cache.cursos = await apiFetch('/docente/cursos');
+    $('kpiCursos').textContent = cache.cursos.length;
+
+    $('cursoSel').innerHTML = cache.cursos.map(c => `
+      <option value="${c.id}">
+        ${escapeHtml(c.curso)} - ${escapeHtml(c.especialidad)} - ${c.promocion}
+      </option>
+    `).join('');
+
+    cache.cursoActual = cache.cursos[0] || null;
+    if(cache.cursoActual){
+      $('cursoSel').value = cache.cursoActual.id;
+      await cargarCurso();
+    } else {
+      $('cursoInfo').innerHTML = `<span class="badge warn">No tienes cursos asignados</span>`;
+      $('tblEst').querySelector('tbody').innerHTML = '';
+      $('kpiEst').textContent = '0';
+      $('kpiFiles').textContent = '0';
+    }
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function cargarCurso(){
+  try{
+    const cursoId = $('cursoSel').value;
+    cache.cursoActual = cache.cursos.find(x => String(x.id) === String(cursoId)) || null;
+
+    if(!cache.cursoActual){
+      $('cursoInfo').innerHTML = `<span class="badge warn">Selecciona un curso</span>`;
+      return;
+    }
+
+    $('cursoInfo').innerHTML = `
+      <div class="badge">${escapeHtml(cache.cursoActual.curso)}</div>
+      <div style="height:8px"></div>
+      <div class="badge info">${escapeHtml(cache.cursoActual.especialidad)}</div>
+      <div class="badge">${cache.cursoActual.promocion}</div>
+    `;
+
+    cache.estudiantes = await apiFetch(`/docente/curso/${cursoId}`);
+
+    $('kpiEst').textContent = cache.estudiantes.length;
+    $('kpiFiles').textContent = cache.estudiantes.filter(x => !!x.nombre_archivo).length;
+
+    renderTabla();
+    show('cursos');
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+function renderTabla(){
+  const q = $('q').value.trim().toLowerCase();
+
+  const rows = (cache.estudiantes || []).filter(x => {
+    const s = `${x.estudiante||''} ${x.titulo||''} ${x.estado||''}`.toLowerCase();
+    return s.includes(q);
+  });
+
+  const tbody = $('tblEst').querySelector('tbody');
+  tbody.innerHTML = rows.map(x => {
+    const hasProyecto = !!x.proyecto_id;
+    const hasFile = !!x.nombre_archivo;
+
+    const archivoCell = hasFile
+      ? `<div>
+           <div class="badge">${escapeHtml(x.nombre_visible || 'Archivo final')}</div>
+           <div style="height:6px"></div>
+           <a class="badge" target="_blank"
+              href="http://localhost:3000/uploads/${encodeURIComponent(x.nombre_archivo)}">
+              Ver
+           </a>
+         </div>`
+      : `<span class="badge warn">Sin archivo</span>`;
+
+    const notaVal = (x.calificacion ?? '');
+    const obsVal = (x.observaciones ?? '');
+
+    const disabled = !hasProyecto ? 'disabled' : '';
+
+    return `
+      <tr>
+        <td>${escapeHtml(x.estudiante)}</td>
+        <td>${hasProyecto ? escapeHtml(x.titulo || '-') : '<span class="badge warn">Sin proyecto</span>'}</td>
+        <td>${hasProyecto ? statusBadge(x.estado) : '—'}</td>
+        <td>${archivoCell}</td>
+        <td>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input class="input" style="width:110px;"
+                   id="nota_${x.proyecto_id || 'x'}"
+                   placeholder="Nota"
+                   value="${escapeHtml(notaVal)}" ${disabled}/>
+            <input class="input" style="flex:1; min-width:160px;"
+                   id="obs_${x.proyecto_id || 'x'}"
+                   placeholder="Observaciones"
+                   value="${escapeHtml(obsVal)}" ${disabled}/>
+            <button class="btn success" ${disabled}
+                    onclick="guardarNota(${x.proyecto_id})">
+              Guardar
+            </button>
+            <button class="btn" ${disabled}
+                    onclick="verNotas(${x.proyecto_id})">
+              Ver historial
+            </button>
+          </div>
+          <div id="hist_${x.proyecto_id || 'x'}" style="margin-top:8px;"></div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  $('hint').textContent = rows.length
+    ? `Mostrando ${rows.length} estudiante(s) del curso seleccionado.`
+    : 'No hay resultados con ese filtro.';
+}
+
+async function guardarNota(proyectoId){
+  try{
+    const calificacion = document.getElementById(`nota_${proyectoId}`).value.trim();
+    const observaciones = document.getElementById(`obs_${proyectoId}`).value.trim();
+
+    if(!calificacion) return toast('Falta nota', 'Escribe la calificación');
+
+    await apiFetch('/notas', {
+      method:'POST',
+      body:{ proyecto_id: proyectoId, calificacion, observaciones }
+    });
+
+    toast('Guardado ✅', 'Nota guardada / actualizada');
+
+    // refrescar solo ese estudiante (rápido)
+    await cargarCurso();
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function verNotas(proyectoId){
+  try{
+    const box = document.getElementById(`hist_${proyectoId}`);
+    box.innerHTML = `<span class="badge info">Cargando...</span>`;
+
+    const notas = await apiFetch(`/notas/proyecto/${proyectoId}`);
+
+    box.innerHTML = notas.length
+      ? notas.map(n => `
+          <div class="card" style="padding:10px; margin-top:10px;">
+            <div><b>Nota:</b> ${n.calificacion}</div>
+            <div style="color:var(--muted); font-size:13px;">${escapeHtml(n.observaciones || '')}</div>
+            <div style="color:var(--muted); font-size:12px;">${escapeHtml(n.fecha || '')} • ${escapeHtml(n.docente || '')}</div>
+          </div>
+        `).join('')
+      : `<span class="badge warn">Sin historial</span>`;
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+loadCursos();
+</script>
+</body>
+</html>

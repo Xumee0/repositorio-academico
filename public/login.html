@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Repositorio Académico | Iniciar sesión</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<div style="min-height:100vh; display:grid; place-items:center; padding:24px;">
+  <div class="card" style="width:min(420px, 100%); padding:22px;">
+    <div class="brand" style="margin-bottom:14px;">
+      <div class="brand-badge">RA</div>
+      <div>
+        <div class="brand-title">Repositorio Académico</div>
+        <div class="brand-sub">Acceso institucional</div>
+      </div>
+    </div>
+
+    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">
+      Inicia sesión para gestionar evidencias, calificaciones y reportes.
+    </div>
+
+    <input class="input" id="correo" placeholder="Correo" autocomplete="username" />
+    <div style="height:10px"></div>
+    <input class="input" id="password" type="password" placeholder="Contraseña" autocomplete="current-password"/>
+
+    <div style="height:14px"></div>
+    <button class="btn" style="width:100%;" onclick="login()">Ingresar</button>
+
+    <div style="height:14px"></div>
+    <div style="color:var(--muted); font-size:12px;">
+      Demo: admin@colegio.com / 123456
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toastBox">
+  <strong id="toastTitle">Aviso</strong>
+  <p id="toastMsg"></p>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script>
+async function login(){
+  try {
+    const correoVal = document.getElementById('correo').value.trim();
+    const passVal = document.getElementById('password').value;
+
+    const data = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: { correo: correoVal, password: passVal }
+    });
+
+    const rol = String(data.rol || '').trim().toLowerCase();
+
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('rol', rol);
+
+    toast('Acceso correcto ✅', `Bienvenido ${rol}`);
+
+    if (rol === 'admin' || rol === 'secretaria') {
+      window.location.href = 'admin.html';
+    } else if (rol === 'docente') {
+      window.location.href = 'docente.html';
+    } else if (rol === 'estudiante') {
+      window.location.href = 'estudiante.html';
+    } else {
+      toast('Error', 'Rol no reconocido: ' + rol);
+    }
+
+  } catch (err) {
+    toast('No se pudo iniciar sesión', err.message || String(err));
+  }
+}
+</script>
+
+
+
+</body>
+</html>

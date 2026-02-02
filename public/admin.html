@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Panel Admin | Repositorio Académico</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">RA</div>
+      <div>
+        <div class="brand-title">Administrador</div>
+        <div class="brand-sub">Gestión institucional</div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
+      <button id="navUsers" onclick="show('users')">Usuarios</button>
+      <button id="navCursos" onclick="show('cursos')">Cursos</button>
+      <button id="navProy" onclick="show('proyectos')">Proyectos</button>
+      <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search">
+        <span style="color:var(--muted)">🔎</span>
+        <input id="q" placeholder="Buscar por nombre / correo / título..." oninput="applyFilter()">
+      </div>
+      <div class="pill">🛡️ Admin</div>
+      <button class="btn success" onclick="downloadReporte()">📄 Reporte Curso #1</button>
+      <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
+    </div>
+
+    <section id="home">
+      <div class="grid">
+        <div class="card col-3"><h3>Usuarios</h3><div class="kpi" id="kpiUsers">—</div><div class="hint">Registrados</div></div>
+        <div class="card col-3"><h3>Cursos</h3><div class="kpi" id="kpiCursos">—</div><div class="hint">Activos</div></div>
+        <div class="card col-3"><h3>Proyectos</h3><div class="kpi" id="kpiProy">—</div><div class="hint">Totales</div></div>
+        <div class="card col-3"><h3>Evidencias</h3><div class="kpi" id="kpiEvi">—</div><div class="hint">Subidas</div></div>
+
+        <div class="card col-12">
+          <h3>Resumen</h3>
+          <div style="color:var(--muted); font-size:13px;">
+            Desde este panel puedes administrar usuarios/cursos, consultar proyectos y generar reportes PDF por curso.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="users" style="display:none;">
+      <div class="card">
+        <h3>Usuarios</h3>
+        <table class="table" id="tblUsers">
+          <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Especialidad</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="cursos" style="display:none;">
+      <div class="card">
+        <h3>Cursos</h3>
+        <table class="table" id="tblCursos">
+          <thead><tr><th>ID</th><th>Nombre</th><th>Promoción</th><th>Especialidad</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="proyectos" style="display:none;">
+      <div class="card">
+        <h3>Proyectos</h3>
+        <table class="table" id="tblProy">
+          <thead><tr><th>ID</th><th>Título</th><th>Estudiante</th><th>Tutor</th><th>Curso</th><th>Estado</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toastBox">
+  <strong id="toastTitle">Aviso</strong>
+  <p id="toastMsg"></p>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script>initTheme();</script>
+
+<script>
+requireAuth('admin','secretaria');
+
+let cache = { users:[], cursos:[], proyectos:[] };
+
+function setActive(btnId){
+  ['navHome','navUsers','navCursos','navProy'].forEach(id=>$(id).classList.remove('active'));
+  $(btnId).classList.add('active');
+}
+function show(section){
+  ['home','users','cursos','proyectos'].forEach(s=>$(s).style.display='none');
+  $(section).style.display='block';
+  setActive('nav' + section.charAt(0).toUpperCase() + section.slice(1).replace('home','Home'));
+  applyFilter();
+}
+
+function applyFilter(){
+  const q = $('q').value.trim().toLowerCase();
+  // Users
+  const u = cache.users.filter(x =>
+    `${x.id} ${x.nombre} ${x.correo} ${x.rol} ${x.especialidad||''}`.toLowerCase().includes(q)
+  );
+  $('tblUsers').querySelector('tbody').innerHTML = u.map(x=>`
+    <tr><td>${x.id}</td><td>${x.nombre}</td><td>${x.correo}</td><td><span class="badge info">${x.rol}</span></td><td>${x.especialidad||''}</td></tr>
+  `).join('');
+
+  // Cursos
+  const c = cache.cursos.filter(x =>
+    `${x.id} ${x.nombre} ${x.promocion} ${x.especialidad}`.toLowerCase().includes(q)
+  );
+  $('tblCursos').querySelector('tbody').innerHTML = c.map(x=>`
+    <tr><td>${x.id}</td><td>${x.nombre}</td><td>${x.promocion}</td><td>${x.especialidad}</td></tr>
+  `).join('');
+
+  // Proyectos
+  const p = cache.proyectos.filter(x =>
+    `${x.id} ${x.titulo} ${x.estudiante} ${x.tutor} ${x.curso} ${x.estado}`.toLowerCase().includes(q)
+  );
+  $('tblProy').querySelector('tbody').innerHTML = p.map(x=>`
+    <tr>
+      <td>${x.id}</td>
+      <td>${x.titulo}</td>
+      <td>${x.estudiante}</td>
+      <td>${x.tutor}</td>
+      <td>${x.curso}</td>
+      <td>${statusBadge(x.estado)}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadAll(){
+  try{
+    cache.users = await apiFetch('/usuarios');
+    cache.cursos = await apiFetch('/cursos');
+    cache.proyectos = await apiFetch('/proyectos');
+
+    $('kpiUsers').textContent = cache.users.length;
+    $('kpiCursos').textContent = cache.cursos.length;
+    $('kpiProy').textContent = cache.proyectos.length;
+
+    applyFilter();
+  }catch(err){
+    toast('Error cargando datos', err.message);
+  }
+}
+
+function downloadReporte(){
+  // curso 1 por defecto (puedes cambiarlo luego con selector)
+  window.open('http://localhost:3000/api/reportes/curso/1', '_blank');
+}
+
+loadAll();
+</script>
+</body>
+</html>

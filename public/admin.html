@@ -19,9 +19,8 @@
 
     <div class="nav">
       <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
-      <button id="navUsers" onclick="show('users')">Usuarios</button>
-      <button id="navCursos" onclick="show('cursos')">Cursos</button>
-      <button id="navProy" onclick="show('proyectos')">Proyectos</button>
+      <button id="navProyectos" onclick="show('proyectos')">Proyectos</button>
+      <button id="navDescargas" onclick="show('descargas')">Descargas</button>
       <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
     </div>
   </aside>
@@ -30,58 +29,92 @@
     <div class="topbar">
       <div class="search">
         <span style="color:var(--muted)">🔎</span>
-        <input id="q" placeholder="Buscar por nombre / correo / título..." oninput="applyFilter()">
+        <input id="q" placeholder="Buscar..." oninput="applyFilter()">
       </div>
       <div class="pill">🛡️ Admin</div>
-      <button class="btn success" onclick="downloadReporte()">📄 Reporte Curso #1</button>
+      <button class="btn success" onclick="descargarExcelGeneral()">
+        📊 Descargar Excel General
+      </button>
       <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
     </div>
 
     <section id="home">
       <div class="grid">
-        <div class="card col-3"><h3>Usuarios</h3><div class="kpi" id="kpiUsers">—</div><div class="hint">Registrados</div></div>
-        <div class="card col-3"><h3>Cursos</h3><div class="kpi" id="kpiCursos">—</div><div class="hint">Activos</div></div>
-        <div class="card col-3"><h3>Proyectos</h3><div class="kpi" id="kpiProy">—</div><div class="hint">Totales</div></div>
-        <div class="card col-3"><h3>Evidencias</h3><div class="kpi" id="kpiEvi">—</div><div class="hint">Subidas</div></div>
+        <div class="card col-3">
+          <h3>Promociones</h3>
+          <div class="kpi" id="kpiPromo">—</div>
+          <div class="hint">Registradas</div>
+        </div>
+        <div class="card col-3">
+          <h3>Especialidades</h3>
+          <div class="kpi" id="kpiEsp">—</div>
+          <div class="hint">Activas</div>
+        </div>
+        <div class="card col-3">
+          <h3>Proyectos</h3>
+          <div class="kpi" id="kpiProy">—</div>
+          <div class="hint">Totales</div>
+        </div>
+        <div class="card col-3">
+          <h3>Memorias</h3>
+          <div class="kpi" id="kpiMem">—</div>
+          <div class="hint">Subidas</div>
+        </div>
 
         <div class="card col-12">
           <h3>Resumen</h3>
           <div style="color:var(--muted); font-size:13px;">
-            Desde este panel puedes administrar usuarios/cursos, consultar proyectos y generar reportes PDF por curso.
+            Desde este panel puedes ver todos los proyectos, descargar memorias técnicas por especialidad/promoción, 
+            y generar reportes Excel generales.
           </div>
         </div>
       </div>
     </section>
 
-    <section id="users" style="display:none;">
-      <div class="card">
-        <h3>Usuarios</h3>
-        <table class="table" id="tblUsers">
-          <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Especialidad</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="cursos" style="display:none;">
-      <div class="card">
-        <h3>Cursos</h3>
-        <table class="table" id="tblCursos">
-          <thead><tr><th>ID</th><th>Nombre</th><th>Promoción</th><th>Especialidad</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
     <section id="proyectos" style="display:none;">
       <div class="card">
-        <h3>Proyectos</h3>
+        <h3>Todos los Proyectos</h3>
         <table class="table" id="tblProy">
-          <thead><tr><th>ID</th><th>Título</th><th>Estudiante</th><th>Tutor</th><th>Curso</th><th>Estado</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Promoción</th>
+              <th>Especialidad</th>
+              <th>Curso</th>
+              <th>Tema/Proyecto</th>
+              <th>Tutor</th>
+              <th>Estado</th>
+              <th>Memoria</th>
+            </tr>
+          </thead>
           <tbody></tbody>
         </table>
       </div>
     </section>
+
+    <section id="descargas" style="display:none;">
+      <div class="card">
+        <h3>Descargar Memorias Técnicas</h3>
+        <p style="color:var(--muted); font-size:13px;">
+          Selecciona una especialidad y promoción para descargar todas las memorias técnicas en un archivo ZIP.
+        </p>
+
+        <div class="grid">
+          <div class="card col-6">
+            <label>Especialidad</label>
+            <select class="input" id="selEsp"></select>
+          </div>
+          <div class="card col-6">
+            <label>Promoción</label>
+            <select class="input" id="selPromo"></select>
+          </div>
+        </div>
+
+        <button class="btn success" onclick="descargarMemoriasPorFiltro()">
+          📥 Descargar ZIP
+        </button>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -95,16 +128,17 @@
 <script>initTheme();</script>
 
 <script>
-requireAuth('admin','secretaria');
+requireAuth('admin');
 
-let cache = { users:[], cursos:[], proyectos:[] };
+let cache = { proyectos:[], especialidades:[], promociones:[] };
 
 function setActive(btnId){
-  ['navHome','navUsers','navCursos','navProy'].forEach(id=>$(id).classList.remove('active'));
+  ['navHome','navProyectos','navDescargas'].forEach(id=>$(id).classList.remove('active'));
   $(btnId).classList.add('active');
 }
+
 function show(section){
-  ['home','users','cursos','proyectos'].forEach(s=>$(s).style.display='none');
+  ['home','proyectos','descargas'].forEach(s=>$(s).style.display='none');
   $(section).style.display='block';
   setActive('nav' + section.charAt(0).toUpperCase() + section.slice(1).replace('home','Home'));
   applyFilter();
@@ -112,57 +146,74 @@ function show(section){
 
 function applyFilter(){
   const q = $('q').value.trim().toLowerCase();
-  // Users
-  const u = cache.users.filter(x =>
-    `${x.id} ${x.nombre} ${x.correo} ${x.rol} ${x.especialidad||''}`.toLowerCase().includes(q)
-  );
-  $('tblUsers').querySelector('tbody').innerHTML = u.map(x=>`
-    <tr><td>${x.id}</td><td>${x.nombre}</td><td>${x.correo}</td><td><span class="badge info">${x.rol}</span></td><td>${x.especialidad||''}</td></tr>
-  `).join('');
-
-  // Cursos
-  const c = cache.cursos.filter(x =>
-    `${x.id} ${x.nombre} ${x.promocion} ${x.especialidad}`.toLowerCase().includes(q)
-  );
-  $('tblCursos').querySelector('tbody').innerHTML = c.map(x=>`
-    <tr><td>${x.id}</td><td>${x.nombre}</td><td>${x.promocion}</td><td>${x.especialidad}</td></tr>
-  `).join('');
-
-  // Proyectos
   const p = cache.proyectos.filter(x =>
-    `${x.id} ${x.titulo} ${x.estudiante} ${x.tutor} ${x.curso} ${x.estado}`.toLowerCase().includes(q)
+    `${x.tema_proyecto} ${x.tutor} ${x.especialidad} ${x.promocion} ${x.curso} ${x.estado}`.toLowerCase().includes(q)
   );
+  
   $('tblProy').querySelector('tbody').innerHTML = p.map(x=>`
     <tr>
-      <td>${x.id}</td>
-      <td>${x.titulo}</td>
-      <td>${x.estudiante}</td>
-      <td>${x.tutor}</td>
-      <td>${x.curso}</td>
+      <td>${x.promocion}</td>
+      <td>${x.especialidad}</td>
+      <td>${escapeHtml(x.curso)}</td>
+      <td><strong>${escapeHtml(x.tema_proyecto)}</strong></td>
+      <td>${escapeHtml(x.tutor)}</td>
       <td>${statusBadge(x.estado)}</td>
+      <td>${x.nombre_archivo ? 
+        `<a class="badge" href="/uploads/${encodeURIComponent(x.nombre_archivo)}" target="_blank">Ver PDF</a>` : 
+        '<span class="badge warn">Sin archivo</span>'
+      }</td>
     </tr>
   `).join('');
 }
 
 async function loadAll(){
   try{
-    cache.users = await apiFetch('/usuarios');
-    cache.cursos = await apiFetch('/cursos');
     cache.proyectos = await apiFetch('/proyectos');
+    cache.especialidades = await apiFetch('/cursos/especialidades');
+    cache.promociones = await apiFetch('/cursos/promociones');
 
-    $('kpiUsers').textContent = cache.users.length;
-    $('kpiCursos').textContent = cache.cursos.length;
     $('kpiProy').textContent = cache.proyectos.length;
+    $('kpiMem').textContent = cache.proyectos.filter(x => x.nombre_archivo).length;
+    $('kpiEsp').textContent = cache.especialidades.length;
+    $('kpiPromo').textContent = cache.promociones.length;
+
+    // Llenar selectores
+    $('selEsp').innerHTML = cache.especialidades.map(e => 
+      `<option value="${e.id}">${escapeHtml(e.nombre)}</option>`
+    ).join('');
+    
+    $('selPromo').innerHTML = cache.promociones.map(p => 
+      `<option value="${p.id}">${p.anio}</option>`
+    ).join('');
 
     applyFilter();
   }catch(err){
-    toast('Error cargando datos', err.message);
+    toast('Error', err.message);
   }
 }
 
-function downloadReporte(){
-  // curso 1 por defecto (puedes cambiarlo luego con selector)
-  window.open('http://localhost:3000/api/reportes/curso/1', '_blank');
+function descargarMemoriasPorFiltro(){
+  const espId = $('selEsp').value;
+  const promoId = $('selPromo').value;
+  
+  if(!espId || !promoId) {
+    return toast('Error', 'Selecciona especialidad y promoción');
+  }
+  
+  window.open(`/api/descargas/pdfs/${espId}/${promoId}`, '_blank');
+}
+
+function descargarExcelGeneral(){
+  window.open('/api/descargas/excel', '_blank');
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
 }
 
 loadAll();

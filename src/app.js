@@ -11,6 +11,9 @@ const notasRoutes = require('./routes/notas.routes');
 const reportesRoutes = require('./routes/reportes.routes');
 const archivoFinalRoutes = require('./routes/archivoFinal.routes');
 const docenteRoutes = require('./routes/docente.routes');
+// Agregar nueva ruta
+const descargasRoutes = require('./routes/descargas.routes');
+const tutoresRoutes = require('./routes/tutores.routes');
 
 const app = express();
 
@@ -48,5 +51,10 @@ app.use('/api/notas', notasRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/archivo-final', archivoFinalRoutes);
 app.use('/api/docente', docenteRoutes);
+
+
+// ... después de las demás rutas
+app.use('/api/descargas', descargasRoutes);
+app.use('/api/tutores', tutoresRoutes);
 
 module.exports = app;

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Panel Tutor | Repositorio Académico</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">RA</div>
+      <div>
+        <div class="brand-title">Tutor</div>
+        <div class="brand-sub">Gestión de Proyectos</div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
+      <button id="navCursos" onclick="show('cursos')">Mis cursos</button>
+      <button id="navProyectos" onclick="show('proyectos')">Crear Proyecto</button>
+      <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search">
+        <span style="color:var(--muted)">🔎</span>
+        <input id="q" placeholder="Buscar tema/proyecto..." oninput="renderTabla()">
+      </div>
+      <div class="pill">📚 Tutor</div>
+      <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section id="home">
+      <div class="grid">
+        <div class="card col-4">
+          <h3>Cursos asignados</h3>
+          <div class="kpi" id="kpiCursos">—</div>
+          <div class="hint">En el sistema</div>
+        </div>
+
+        <div class="card col-4">
+          <h3>Proyectos (curso actual)</h3>
+          <div class="kpi" id="kpiProy">—</div>
+          <div class="hint">Temas registrados</div>
+        </div>
+
+        <div class="card col-4">
+          <h3>Memorias técnicas</h3>
+          <div class="kpi" id="kpiFiles">—</div>
+          <div class="hint">PDFs subidos</div>
+        </div>
+
+        <div class="card col-12">
+          <h3>Acceso rápido</h3>
+          <div style="color:var(--muted); font-size:13px;">
+            Ve a <b>"Mis cursos"</b>, selecciona un curso, sube memorias técnicas y califica.
+          </div>
+          <div style="height:10px"></div>
+          <button class="btn" onclick="show('cursos')">Ir a Mis cursos</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIS CURSOS -->
+    <section id="cursos" style="display:none;">
+      <div class="grid">
+        <div class="card col-4">
+          <h3>Seleccionar curso</h3>
+
+          <label style="font-size:13px; color:var(--muted);">Curso</label>
+          <select class="input" id="cursoSel" onchange="cargarCurso()"></select>
+
+          <div style="height:10px"></div>
+          <div id="cursoInfo" style="color:var(--muted); font-size:13px;"></div>
+
+          <div style="height:12px"></div>
+          <button class="btn" onclick="cargarCurso()">Actualizar</button>
+          <button class="btn success" onclick="descargarMemoriasTecnicas()">
+            📥 Descargar Memorias (ZIP)
+          </button>
+        </div>
+
+        <div class="card col-8">
+          <h3>Proyectos del curso</h3>
+          <div style="color:var(--muted); font-size:13px;">
+            Cada proyecto representa un tema. Puedes subir la memoria técnica y calificar.
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div style="overflow:auto;">
+            <table class="table" id="tblProy">
+              <thead>
+                <tr>
+                  <th>Tema/Proyecto</th>
+                  <th>Estado</th>
+                  <th>Memoria Técnica</th>
+                  <th style="min-width:240px;">Calificar</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div style="height:10px"></div>
+          <div id="hint" style="color:var(--muted); font-size:12px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CREAR PROYECTO -->
+    <section id="proyectos" style="display:none;">
+      <div class="card">
+        <h3>Crear Nuevo Proyecto</h3>
+        <div style="color:var(--muted); font-size:13px; margin-bottom:20px;">
+          Un proyecto representa un tema de memoria técnica para un curso específico.
+        </div>
+
+        <label>Curso</label>
+        <select class="input" id="cursoNuevo"></select>
+
+        <label>Título del Proyecto (Tema)</label>
+        <input class="input" id="tituloNuevo" placeholder="Ej: Sistema de Gestión Académica">
+
+        <label>Descripción (opcional)</label>
+        <textarea class="input" id="descripcionNuevo" rows="3" 
+                  placeholder="Breve descripción del proyecto..."></textarea>
+
+        <div style="height:10px"></div>
+        <button class="btn success" onclick="crearProyecto()">Crear Proyecto</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toastBox">
+  <strong id="toastTitle">Aviso</strong>
+  <p id="toastMsg"></p>
+</div>
+
+<!-- Modal para subir archivo -->
+<div id="modalUpload" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; 
+     background:rgba(0,0,0,0.7); z-index:1000; padding:40px;">
+  <div class="card" style="max-width:500px; margin:auto;">
+    <h3>Subir Memoria Técnica (PDF)</h3>
+    <p style="color:var(--muted); font-size:13px;">
+      Proyecto: <strong id="modalProyectoNombre"></strong>
+    </p>
+    <input type="file" id="fileUpload" accept=".pdf" class="input">
+    <div style="height:10px"></div>
+    <button class="btn success" onclick="subirArchivo()">Subir</button>
+    <button class="btn" onclick="cerrarModal()">Cancelar</button>
+  </div>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script>initTheme();</script>
+<script>
+requireAuth('tutor');
+
+let cache = {
+  cursos: [],
+  cursoActual: null,
+  proyectos: [],
+  proyectoIdUpload: null
+};
+
+function setActive(btnId){
+  ['navHome','navCursos','navProyectos'].forEach(id=>$(id).classList.remove('active'));
+  $(btnId).classList.add('active');
+}
+
+function show(section){
+  ['home','cursos','proyectos'].forEach(s=>$(s).style.display='none');
+  $(section).style.display='block';
+  setActive('nav' + section.charAt(0).toUpperCase() + section.slice(1).replace('home','Home'));
+}
+
+async function loadCursos(){
+  try{
+    cache.cursos = await apiFetch('/tutores/cursos');
+    $('kpiCursos').textContent = cache.cursos.length;
+
+    // Llenar selectores
+    const html = cache.cursos.map(c => `
+      <option value="${c.id}">
+        ${escapeHtml(c.curso)} - ${escapeHtml(c.especialidad)} - ${c.promocion}
+      </option>
+    `).join('');
+
+    $('cursoSel').innerHTML = html;
+    $('cursoNuevo').innerHTML = html;
+
+    if(cache.cursos.length > 0){
+      cache.cursoActual = cache.cursos[0];
+      $('cursoSel').value = cache.cursoActual.id;
+      await cargarCurso();
+    }
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function cargarCurso(){
+  try{
+    const cursoId = $('cursoSel').value;
+    cache.cursoActual = cache.cursos.find(x => String(x.id) === String(cursoId));
+
+    if(!cache.cursoActual) return;
+
+    $('cursoInfo').innerHTML = `
+      <div class="badge">${escapeHtml(cache.cursoActual.curso)}</div>
+      <div style="height:8px"></div>
+      <div class="badge info">${escapeHtml(cache.cursoActual.especialidad)}</div>
+      <div class="badge">${cache.cursoActual.promocion}</div>
+    `;
+
+    cache.proyectos = await apiFetch(`/tutores/curso/${cursoId}`);
+
+    $('kpiProy').textContent = cache.proyectos.length;
+    $('kpiFiles').textContent = cache.proyectos.filter(x => !!x.nombre_archivo).length;
+
+    renderTabla();
+    show('cursos');
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+function renderTabla(){
+  const q = $('q').value.trim().toLowerCase();
+
+  const rows = cache.proyectos.filter(x => {
+    const s = `${x.tema_proyecto||''} ${x.descripcion||''} ${x.estado||''}`.toLowerCase();
+    return s.includes(q);
+  });
+
+  const tbody = $('tblProy').querySelector('tbody');
+  tbody.innerHTML = rows.map(x => {
+    const hasFile = !!x.nombre_archivo;
+
+    const archivoCell = hasFile
+      ? `<div>
+           <div class="badge">${escapeHtml(x.nombre_visible || 'Memoria Técnica')}</div>
+           <div style="height:6px"></div>
+           <a class="badge" target="_blank"
+              href="/uploads/${encodeURIComponent(x.nombre_archivo)}">
+              Ver PDF
+           </a>
+         </div>`
+      : `<button class="btn success" onclick="abrirModalUpload(${x.proyecto_id}, '${escapeHtml(x.tema_proyecto)}')">
+           Subir PDF
+         </button>`;
+
+    const notaVal = (x.calificacion ?? '');
+    const obsVal = (x.observaciones ?? '');
+
+    return `
+      <tr>
+        <td><strong>${escapeHtml(x.tema_proyecto)}</strong></td>
+        <td>${statusBadge(x.estado)}</td>
+        <td>${archivoCell}</td>
+        <td>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input class="input" style="width:110px;"
+                   id="nota_${x.proyecto_id}"
+                   placeholder="Nota"
+                   value="${escapeHtml(notaVal)}"/>
+            <input class="input" style="flex:1; min-width:160px;"
+                   id="obs_${x.proyecto_id}"
+                   placeholder="Observaciones"
+                   value="${escapeHtml(obsVal)}"/>
+            <button class="btn success" onclick="guardarNota(${x.proyecto_id})">
+              Guardar
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  $('hint').textContent = rows.length
+    ? `Mostrando ${rows.length} proyecto(s) del curso seleccionado.`
+    : 'No hay resultados con ese filtro.';
+}
+
+function abrirModalUpload(proyectoId, nombreProyecto){
+  cache.proyectoIdUpload = proyectoId;
+  $('modalProyectoNombre').textContent = nombreProyecto;
+  $('modalUpload').style.display = 'block';
+}
+
+function cerrarModal(){
+  $('modalUpload').style.display = 'none';
+  cache.proyectoIdUpload = null;
+  $('fileUpload').value = '';
+}
+
+async function subirArchivo(){
+  try{
+    const file = $('fileUpload').files[0];
+    if(!file) return toast('Error', 'Selecciona un archivo PDF');
+
+    const formData = new FormData();
+    formData.append('archivo', file);
+    formData.append('proyecto_id', cache.proyectoIdUpload);
+
+    const resp = await fetch(`${API_BASE}/archivo-final`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
+
+    if(!resp.ok) throw new Error('Error al subir archivo');
+
+    toast('Éxito ✅', 'Memoria técnica subida correctamente');
+    cerrarModal();
+    await cargarCurso();
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function guardarNota(proyectoId){
+  try{
+    const calificacion = $(`nota_${proyectoId}`).value.trim();
+    const observaciones = $(`obs_${proyectoId}`).value.trim();
+
+    if(!calificacion) return toast('Falta nota', 'Escribe la calificación');
+
+    await apiFetch('/notas', {
+      method:'POST',
+      body:{ proyecto_id: proyectoId, calificacion, observaciones }
+    });
+
+    toast('Guardado ✅', 'Nota guardada/actualizada');
+    await cargarCurso();
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function crearProyecto(){
+  try{
+    const curso_id = $('cursoNuevo').value;
+    const titulo = $('tituloNuevo').value.trim();
+    const descripcion = $('descripcionNuevo').value.trim();
+
+    if(!curso_id || !titulo) {
+      return toast('Error', 'Completa los campos requeridos');
+    }
+
+    await apiFetch('/proyectos', {
+      method: 'POST',
+      body: { curso_id, titulo, descripcion }
+    });
+
+    toast('Éxito ✅', 'Proyecto creado correctamente');
+    $('tituloNuevo').value = '';
+    $('descripcionNuevo').value = '';
+    
+    await loadCursos();
+    show('cursos');
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function descargarMemoriasTecnicas(){
+  if(!cache.cursoActual) return;
+  
+  const curso = cache.cursos.find(c => c.id === cache.cursoActual.id);
+  // Necesitarías obtener especialidad_id y promocion_id del curso
+  // Por ahora, puedes hacer otra consulta o incluirlos en la respuesta
+  
+  window.open(`/api/descargas/pdfs/${curso.especialidad_id}/${curso.promocion_id}`, '_blank');
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+loadCursos();
+</script>
+</body>
+</html>

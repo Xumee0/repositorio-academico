@@ -54,4 +54,5 @@ function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   window.location.href = 'index.html';
+  // Redirigir al login
 }

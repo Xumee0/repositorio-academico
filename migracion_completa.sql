@@ -9,18 +9,27 @@
 -- mysql -u root -p nombre_bd > backup_$(date +%Y%m%d_%H%M%S).sql
 
 -- =====================================================
--- PASO 1: Modificar roles de usuarios
+-- PASO 1: Modificar roles de usuarios (ORDEN CORRECTO)
 -- =====================================================
 
--- Cambiar 'docente' por 'tutor'
-UPDATE usuarios SET rol = 'tutor' WHERE rol = 'docente';
+-- 1) Primero ampliar el ENUM para permitir tanto valores viejos como nuevos
+-- (esto evita truncamientos mientras actualizas datos)
+ALTER TABLE usuarios
+MODIFY COLUMN rol ENUM('admin','secretaria','docente','tutor','estudiante') NOT NULL;
 
--- Consolidar admin y secretaria en 'admin'
+-- 2) Consolidar admin y secretaria
 UPDATE usuarios SET rol = 'admin' WHERE rol IN ('admin', 'secretaria');
 
--- Actualizar enum de roles (solo admin y tutor)
-ALTER TABLE usuarios 
+-- 3) Convertir docente -> tutor
+UPDATE usuarios SET rol = 'tutor' WHERE rol = 'docente';
+
+-- 4) Eliminar rol estudiante: conviértelo a tutor (o bórralo, pero esto es más seguro)
+UPDATE usuarios SET rol = 'tutor' WHERE rol = 'estudiante';
+
+-- 5) Finalmente dejar el ENUM limpio solo con admin y tutor
+ALTER TABLE usuarios
 MODIFY COLUMN rol ENUM('admin','tutor') NOT NULL;
+
 
 -- =====================================================
 -- PASO 2: Renombrar tabla docente_curso a tutor_curso

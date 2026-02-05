@@ -17,12 +17,12 @@ function requireAuth(...allowedRoles){
   const rol = localStorage.getItem('rol');
 
   if(!token || !rol){
-    window.location.replace('login.html');
+    window.location.replace('index.html');
     return null;
   }
 
   if(allowedRoles.length && !allowedRoles.includes(rol)){
-    window.location.replace('login.html');
+    window.location.replace('index.html');
     return null;
   }
 

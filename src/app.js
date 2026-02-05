@@ -24,14 +24,14 @@ app.use(express.json());
 // ARCHIVOS ESTÁTICOS
 // =========================
 
-// Servir frontend HTML (carpeta public)
-app.use(express.static(path.join(dirname, '../public')));
+// Frontend HTML
+app.use(express.static(path.join(__dirname, '../public')));
 
-// Servir archivos subidos
-app.use('/uploads', express.static(path.join(dirname, 'uploads')));
+// Uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // =========================
-// RUTA RAÍZ (IMPORTANTE)
+// RUTA RAÍZ
 // =========================
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));

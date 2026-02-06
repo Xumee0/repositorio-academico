@@ -110,7 +110,6 @@
                   <th>Tema/Proyecto</th>
                   <th>Estado</th>
                   <th>Memoria Técnica</th>
-                  <th style="min-width:240px;">Calificar</th>
                   <!-- ✅ NUEVA COLUMNA -->
                   <th style="min-width:170px;">Acciones</th>
                 </tr>
@@ -362,29 +361,6 @@ function renderTabla(){
            Subir PDF
          </button>`;
 
-    const notaVal = (x.calificacion ?? '');
-    const obsVal = (x.observaciones ?? '');
-
-    return `
-      <tr>
-        <td><strong>${escapeHtml(x.tema_proyecto)}</strong></td>
-        <td>${statusBadge(x.estado)}</td>
-        <td>${archivoCell}</td>
-        <td>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <input class="input" style="width:110px;"
-                   id="nota_${x.proyecto_id}"
-                   placeholder="Nota"
-                   value="${escapeHtml(notaVal)}"/>
-            <input class="input" style="flex:1; min-width:160px;"
-                   id="obs_${x.proyecto_id}"
-                   placeholder="Observaciones"
-                   value="${escapeHtml(obsVal)}"/>
-            <button class="btn success" onclick="guardarNota(${x.proyecto_id})">
-              Guardar
-            </button>
-          </div>
-        </td>
 
         <!-- ✅ NUEVO: Acciones -->
         <td>
@@ -393,8 +369,7 @@ function renderTabla(){
             <button class="btn danger" onclick="eliminarProyecto(${x.proyecto_id})">Eliminar</button>
           </div>
         </td>
-      </tr>
-    `;
+      
   }).join('');
 
   $('hint').textContent = rows.length
@@ -537,26 +512,6 @@ async function eliminarProyecto(proyectoId, desdeModal=false){
 
     toast('Éxito ✅', 'Proyecto eliminado');
     if(desdeModal) cerrarModalEditar();
-    await cargarProyectos();
-
-  }catch(err){
-    toast('Error', err.message);
-  }
-}
-
-async function guardarNota(proyectoId){
-  try{
-    const calificacion = $(`nota_${proyectoId}`).value.trim();
-    const observaciones = $(`obs_${proyectoId}`).value.trim();
-
-    if(!calificacion) return toast('Falta nota', 'Escribe la calificación');
-
-    await apiFetch('/notas', {
-      method:'POST',
-      body:{ proyecto_id: proyectoId, calificacion, observaciones }
-    });
-
-    toast('Guardado ✅', 'Nota guardada/actualizada');
     await cargarProyectos();
 
   }catch(err){

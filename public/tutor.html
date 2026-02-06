@@ -146,8 +146,18 @@
         <textarea class="input" id="descripcionNuevo" rows="3" 
                   placeholder="Breve descripción del proyecto..."></textarea>
 
+        <label>Memoria Técnica (PDF) - Opcional</label>
+        <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">
+          Puedes subir la memoria técnica ahora o después desde "Proyectos"
+        </div>
+        <input type="file" class="input" id="archivoNuevo" accept=".pdf" onchange="mostrarInfoArchivo()">
+        <div id="archivoInfo" style="color:var(--muted); font-size:12px; margin-top:4px;"></div>
+
         <div style="height:10px"></div>
-        <button class="btn success" onclick="crearProyecto()">Crear Proyecto</button>
+        <button class="btn success" onclick="crearProyecto()" id="btnCrearProyecto">
+          Crear Proyecto
+        </button>
+        <button class="btn" onclick="limpiarFormulario()">Limpiar</button>
       </div>
     </section>
 
@@ -395,25 +405,82 @@ async function crearProyecto(){
     const especialidad_id = $('especialidadNuevo').value;
     const titulo = $('tituloNuevo').value.trim();
     const descripcion = $('descripcionNuevo').value.trim();
+    const archivo = $('archivoNuevo').files[0];
 
     if(!promocion_id || !especialidad_id || !titulo) {
-      return toast('Error', 'Completa los campos requeridos');
+      return toast('Error', 'Completa los campos requeridos (promoción, especialidad y título)');
     }
 
-    await apiFetch('/proyectos', {
+    // Deshabilitar botón mientras se procesa
+    const btn = $('btnCrearProyecto');
+    btn.disabled = true;
+    btn.textContent = 'Creando...';
+
+    // 1. Crear el proyecto
+    const proyecto = await apiFetch('/proyectos', {
       method: 'POST',
       body: { promocion_id, especialidad_id, titulo, descripcion }
     });
 
-    toast('Éxito ✅', 'Proyecto creado correctamente');
-    $('tituloNuevo').value = '';
-    $('descripcionNuevo').value = '';
-    
+    // 2. Si hay archivo, subirlo
+    if(archivo) {
+      btn.textContent = 'Subiendo archivo...';
+      
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+      formData.append('proyecto_id', proyecto.id);
+
+      const resp = await fetch(`${API_BASE}/archivo-final`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: formData
+      });
+
+      if(!resp.ok) {
+        toast('Advertencia ⚠️', 'Proyecto creado pero falló subir el archivo. Súbelo desde "Proyectos"');
+      } else {
+        toast('Éxito ✅', 'Proyecto creado y archivo subido correctamente');
+      }
+    } else {
+      toast('Éxito ✅', 'Proyecto creado correctamente');
+    }
+
+    // Limpiar formulario y recargar
+    limpiarFormulario();
     await loadInicial();
     show('proyectos');
 
   }catch(err){
     toast('Error', err.message);
+  }finally{
+    const btn = $('btnCrearProyecto');
+    btn.disabled = false;
+    btn.textContent = 'Crear Proyecto';
+  }
+}
+
+function limpiarFormulario(){
+  $('promocionNuevo').value = '';
+  $('especialidadNuevo').value = '';
+  $('tituloNuevo').value = '';
+  $('descripcionNuevo').value = '';
+  $('archivoNuevo').value = '';
+  $('archivoInfo').textContent = '';
+}
+
+function mostrarInfoArchivo(){
+  const archivo = $('archivoNuevo').files[0];
+  const info = $('archivoInfo');
+  
+  if(archivo) {
+    const sizeMB = (archivo.size / 1024 / 1024).toFixed(2);
+    info.innerHTML = `
+      <span class="badge success">
+        📄 ${escapeHtml(archivo.name)} (${sizeMB} MB)
+      </span>
+    `;
+  } else {
+    info.textContent = '';
   }
 }
 

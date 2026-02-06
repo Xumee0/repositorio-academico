@@ -8,4 +8,4 @@
 ## 2025-02 - eliminar cursos.sql
 - Eliminó capa intermedia de "cursos"
 - Conectó proyectos directamente con promoción + especialidad
-- Eliminó tabla tutor_curso
+- Eliminó tabla tutor_cursoah

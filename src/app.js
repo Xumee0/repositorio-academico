@@ -28,7 +28,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
 
 // =========================
 // RUTA RAÍZ

@@ -203,7 +203,8 @@ async function migrate() {
           'ER_DUP_KEYNAME': 'Constraint ya existe',
           'ER_BAD_TABLE_ERROR': 'Tabla no existe',
           'ER_BAD_FIELD_ERROR': 'Campo no existe',
-          'ER_DROP_INDEX_FK': 'Foreign key relacionada existe'
+          'ER_DROP_INDEX_FK': 'Foreign key relacionada existe',
+          'ER_FK_DUP_NAME': 'Foreign key ya existe'
         };
         
         if (safeErrors[err.code]) {

@@ -3,9 +3,7 @@ const { verifyToken } = require('../middlewares/auth');
 const path = require('path');
 const fs = require('fs');
 
-// =====================================================
 // DESCARGAR ARCHIVO CON AUTENTICACIÓN
-// =====================================================
 router.get('/:filename', verifyToken, async (req, res) => {
   try {
     const { filename } = req.params;

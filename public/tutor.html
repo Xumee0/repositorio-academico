@@ -39,12 +39,6 @@
     <section id="home">
       <div class="grid">
         <div class="card col-4">
-          <h3>Promociones</h3>
-          <div class="kpi" id="kpiPromos">—</div>
-          <div class="hint">Totales</div>
-        </div>
-
-        <div class="card col-4">
           <h3>Proyectos</h3>
           <div class="kpi" id="kpiProy">—</div>
           <div class="hint">En el sistema</div>
@@ -109,7 +103,6 @@
                   <th>Estado</th>
                   <th>Memoria Técnica</th>
                   <th style="min-width:240px;">Calificar</th>
-                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -184,60 +177,6 @@
     <button class="btn" onclick="cerrarModal()">Cancelar</button>
   </div>
 </div>
-
-<!-- Modal para editar proyecto -->
-<div id="modalEditarProyecto" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; 
-     background:rgba(0,0,0,0.7); z-index:1000; padding:40px;">
-  <div class="card" style="max-width:600px; margin:auto;">
-    <h3>✏️ Editar Proyecto</h3>
-    <input type="hidden" id="editProyectoId">
-    
-    <label>Título del Proyecto *</label>
-    <input class="input" id="editTitulo" placeholder="Título del proyecto">
-    
-    <label style="margin-top:12px;">Descripción</label>
-    <textarea class="input" id="editDescripcion" rows="4" 
-              placeholder="Descripción del proyecto..."></textarea>
-    
-    <div style="height:16px"></div>
-    <div style="display:flex; gap:8px;">
-      <button class="btn success" onclick="guardarEdicionProyecto()">
-        💾 Guardar Cambios
-      </button>
-      <button class="btn" onclick="cerrarModalEditar()">
-        Cancelar
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal para confirmar eliminación -->
-<div id="modalEliminarProyecto" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; 
-     background:rgba(0,0,0,0.7); z-index:1000; padding:40px;">
-  <div class="card" style="max-width:500px; margin:auto; border:2px solid #ef4444;">
-    <h3 style="color:#ef4444;">⚠️ Confirmar Eliminación</h3>
-    <input type="hidden" id="eliminarProyectoId">
-    
-    <p>¿Estás seguro de que deseas eliminar el proyecto:</p>
-    <p style="font-weight:bold; font-size:1.1rem;" id="eliminarProyectoNombre"></p>
-    
-    <div style="background:#fee2e2; padding:12px; border-radius:8px; margin:16px 0;">
-      <small style="color:#991b1b;">
-        ⚠️ Esta acción no se puede deshacer. Se eliminará el proyecto y su archivo asociado.
-      </small>
-    </div>
-    
-    <div style="display:flex; gap:8px;">
-      <button class="btn danger" onclick="eliminarProyecto()">
-        🗑️ Sí, Eliminar
-      </button>
-      <button class="btn" onclick="cerrarModalEliminar()">
-        Cancelar
-      </button>
-    </div>
-  </div>
-</div>
-
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/ui.js"></script>
@@ -355,10 +294,10 @@ function renderTabla(){
       ? `<div>
            <div class="badge">${escapeHtml(x.nombre_visible || 'Memoria Técnica')}</div>
            <div style="height:6px"></div>
-           <button class="btn small" 
-              onclick="descargarPDF('${x.nombre_archivo}', '${escapeHtml(x.nombre_visible ||  'Memoria Técnica')}')">
-              📥 Ver PDF
-           </button>
+           <a class="badge" target="_blank"
+              href="/uploads/${encodeURIComponent(x.nombre_archivo)}">
+              Ver PDF
+           </a>
          </div>`
       : `<button class="btn success" onclick="abrirModalUpload(${x.proyecto_id}, '${escapeHtml(x.tema_proyecto)}')">
            Subir PDF
@@ -384,16 +323,6 @@ function renderTabla(){
                    value="${escapeHtml(obsVal)}"/>
             <button class="btn success" onclick="guardarNota(${x.proyecto_id})">
               Guardar
-            </button>
-          </div>
-        </td>
-        <td>
-          <div style="display:flex; gap:4px;">
-            <button class="btn small" onclick="editarProyecto(${x.proyecto_id})" title="Editar proyecto">
-              ✏️
-            </button>
-            <button class="btn small danger" onclick="confirmarEliminarProyecto(${x.proyecto_id})" title="Eliminar proyecto">
-              🗑️
             </button>
           </div>
         </td>
@@ -550,12 +479,64 @@ function mostrarInfoArchivo(){
 }
 
 async function descargarMemoriasTecnicas(){
-  if(!cache.promocionActual || !cache.especialidadActual) return;
-  
-  window.open(
-    `/api/descargas/pdfs/${cache.especialidadActual.id}/${cache.promocionActual.id}`, 
-    '_blank'
-  );
+  try {
+    if(!cache.promocionActual || !cache.especialidadActual) {
+      return toast('Error', 'Selecciona promoción y especialidad primero');
+    }
+    
+    const btn = $('btnDescargar');
+    btn.disabled = true;
+    btn.textContent = '⏳ Descargando...';
+    
+    const token = getToken();
+    const url = `/api/descargas/pdfs/${cache.especialidadActual.id}/${cache.promocionActual.id}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.msg || 'Error al descargar');
+    }
+    
+    // Obtener el blob (archivo ZIP)
+    const blob = await response.blob();
+    
+    // Obtener nombre del archivo del header Content-Disposition
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'Memorias_Tecnicas.zip';
+    
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/);
+      if (match) filename = match[1];
+    }
+    
+    // Crear enlace de descarga
+    const urlBlob = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = urlBlob;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Limpiar
+    window.URL.revokeObjectURL(urlBlob);
+    document.body.removeChild(a);
+    
+    toast('Éxito ✅', 'Memorias técnicas descargadas correctamente');
+    
+  } catch (err) {
+    console.error('Error al descargar:', err);
+    toast('Error', err.message || 'No se pudo descargar el archivo');
+  } finally {
+    const btn = $('btnDescargar');
+    btn.disabled = false;
+    btn.textContent = '📥 Descargar Memorias (ZIP)';
+  }
 }
 
 function escapeHtml(str){
@@ -565,141 +546,6 @@ function escapeHtml(str){
     .replaceAll('>','&gt;')
     .replaceAll('"','&quot;')
     .replaceAll("'","&#039;");
-}
-
-
-// ============================================
-// DESCARGAR PDF CON TOKEN
-// ============================================
-async function descargarPDF(nombreArchivo, nombreVisible) {
-  try {
-    const token = getToken();
-    const response = await fetch(`/uploads/${encodeURIComponent(nombreArchivo)}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) {
-      throw new Error('Error al descargar el archivo');
-    }
-    
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = nombreVisible || nombreArchivo;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-    
-  } catch (err) {
-    toast('Error', 'No se pudo descargar el archivo: ' + err.message);
-  }
-}
-
-// ============================================
-// EDITAR PROYECTO
-// ============================================
-async function editarProyecto(proyectoId) {
-  try {
-    const proyecto = cache.proyectos.find(p => p.proyecto_id === proyectoId);
-    if (!proyecto) {
-      return toast('Error', 'Proyecto no encontrado');
-    }
-    
-    $('editProyectoId').value = proyectoId;
-    $('editTitulo').value = proyecto.tema_proyecto || '';
-    $('editDescripcion').value = proyecto.descripcion || '';
-    
-    $('modalEditarProyecto').style.display = 'block';
-    
-  } catch (err) {
-    toast('Error', err.message);
-  }
-}
-
-async function guardarEdicionProyecto() {
-  try {
-    const proyectoId = $('editProyectoId').value;
-    const titulo = $('editTitulo').value.trim();
-    const descripcion = $('editDescripcion').value.trim();
-    
-    if (!titulo) {
-      return toast('Error', 'El título es obligatorio');
-    }
-    
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
-    
-    await apiFetch(`/proyectos/${proyectoId}`, {
-      method: 'PUT',
-      body: { titulo, descripcion }
-    });
-    
-    toast('Éxito ✅', 'Proyecto actualizado correctamente');
-    $('modalEditarProyecto').style.display = 'none';
-    
-    await cargarProyectos();
-    
-  } catch (err) {
-    toast('Error', err.message);
-  } finally {
-    const btn = event.target;
-    btn.disabled = false;
-    btn.textContent = 'Guardar Cambios';
-  }
-}
-
-// ============================================
-// ELIMINAR PROYECTO
-// ============================================
-function confirmarEliminarProyecto(proyectoId) {
-  const proyecto = cache.proyectos.find(p => p.proyecto_id === proyectoId);
-  if (!proyecto) {
-    return toast('Error', 'Proyecto no encontrado');
-  }
-  
-  $('eliminarProyectoId').value = proyectoId;
-  $('eliminarProyectoNombre').textContent = proyecto.tema_proyecto;
-  $('modalEliminarProyecto').style.display = 'block';
-}
-
-async function eliminarProyecto() {
-  try {
-    const proyectoId = $('eliminarProyectoId').value;
-    
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = 'Eliminando...';
-    
-    await apiFetch(`/proyectos/${proyectoId}`, {
-      method: 'DELETE'
-    });
-    
-    toast('Éxito ✅', 'Proyecto eliminado correctamente');
-    $('modalEliminarProyecto').style.display = 'none';
-    
-    await cargarProyectos();
-    
-  } catch (err) {
-    toast('Error', err.message);
-  } finally {
-    const btn = event.target;
-    btn.disabled = false;
-    btn.textContent = 'Eliminar';
-  }
-}
-
-// ============================================
-// CERRAR MODALES
-// ============================================
-function cerrarModalEditar() {
-  $('modalEditarProyecto').style.display = 'none';
-}
-
-function cerrarModalEliminar() {
-  $('modalEliminarProyecto').style.display = 'none';
 }
 
 loadInicial();

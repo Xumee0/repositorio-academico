@@ -62,7 +62,8 @@ router.get('/pdfs/:especialidad_id/:promocion_id', verifyToken, async (req, res)
 
     archive.pipe(res);
 
-    const uploadsPath = path.join(__dirname, '../uploads');
+    const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
+
     let archivosAgregados = 0;
 
     archivos.forEach((archivo, index) => {
@@ -70,7 +71,12 @@ router.get('/pdfs/:especialidad_id/:promocion_id', verifyToken, async (req, res)
 
       if (fs.existsSync(filePath)) {
         const extension = path.extname(archivo.nombre_archivo);
-        const nombreEnZip = `${String(index + 1).padStart(3, '0')}_${archivo.proyecto}${extension}`;
+        const safeProyecto = String(archivo.proyecto || 'Proyecto')
+      .replace(/[\\/:*?"<>|]/g, '')
+      .trim();
+
+    const nombreEnZip = `${String(index + 1).padStart(3, '0')}_${safeProyecto}${extension}`;
+
 
         archive.file(filePath, { name: nombreEnZip });
         archivosAgregados++;

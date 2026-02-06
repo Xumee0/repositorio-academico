@@ -19,6 +19,87 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+// Función mejorada para limpiar SQL de comentarios
+function cleanSQL(sql) {
+  let cleaned = '';
+  let inBlockComment = false;
+  let inLineComment = false;
+  
+  const lines = sql.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    let processedLine = '';
+    
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      const nextChar = j + 1 < line.length ? line[j + 1] : '';
+      
+      // Detectar inicio de comentario de bloque
+      if (!inBlockComment && !inLineComment && char === '/' && nextChar === '*') {
+        inBlockComment = true;
+        j++; // Saltar el siguiente carácter
+        continue;
+      }
+      
+      // Detectar fin de comentario de bloque
+      if (inBlockComment && char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        j++; // Saltar el siguiente carácter
+        continue;
+      }
+      
+      // Detectar comentario de línea
+      if (!inBlockComment && !inLineComment && char === '-' && nextChar === '-') {
+        inLineComment = true;
+        break; // Ignorar el resto de la línea
+      }
+      
+      // Si no estamos en un comentario, agregar el carácter
+      if (!inBlockComment && !inLineComment) {
+        processedLine += char;
+      }
+    }
+    
+    // Resetear comentario de línea al final de cada línea
+    inLineComment = false;
+    
+    // Agregar la línea procesada si tiene contenido
+    if (processedLine.trim().length > 0) {
+      cleaned += processedLine + '\n';
+    }
+  }
+  
+  return cleaned;
+}
+
+// Función para extraer queries ejecutables
+function extractQueries(sql) {
+  const queries = [];
+  
+  // Dividir por punto y coma
+  const statements = sql.split(';');
+  
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+    
+    if (trimmed.length === 0) continue;
+    
+    // Solo incluir queries que empiecen con palabras clave SQL válidas
+    const firstWord = trimmed.split(/\s+/)[0].toUpperCase();
+    const validKeywords = ['ALTER', 'CREATE', 'DROP', 'UPDATE', 'INSERT', 'DELETE', 'TRUNCATE', 'RENAME'];
+    
+    // También excluir queries de verificación
+    const skipKeywords = ['SELECT', 'SHOW', 'DESCRIBE', 'DESC'];
+    
+    if (validKeywords.includes(firstWord) && !skipKeywords.includes(firstWord)) {
+      queries.push(trimmed);
+    }
+  }
+  
+  return queries;
+}
+
 async function migrate() {
   log('\n╔════════════════════════════════════════════════════╗', 'cyan');
   log('║   MIGRACIÓN: ELIMINAR CURSOS - RAILWAY            ║', 'cyan');
@@ -27,12 +108,12 @@ async function migrate() {
 
   // Configuración de conexión
   const config = {
-    host: process.env.MYSQLHOST || process.env.DB_HOST,
-    port: process.env.MYSQLPORT || process.env.DB_PORT || 3306,
+    host: process.env.DB_HOST_PUBLIC || process.env.MYSQLHOST || process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT_PUBLIC || process.env.MYSQLPORT || process.env.DB_PORT || '3306'),
     user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
     password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD,
     database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway',
-    multipleStatements: true // IMPORTANTE: permite ejecutar múltiples queries
+    connectTimeout: 10000
   };
 
   log('📋 Configuración de conexión:', 'blue');
@@ -60,18 +141,13 @@ async function migrate() {
 
     let sql = fs.readFileSync(sqlPath, 'utf8');
     
-    // Remover comentarios que causan problemas en multipleStatements
-    // Mantener solo las queries SQL ejecutables
-    sql = sql
-      .split('\n')
-      .filter(line => {
-        const trimmed = line.trim();
-        // Eliminar líneas de comentarios completos
-        return !trimmed.startsWith('--') && trimmed !== '';
-      })
-      .join('\n');
+    // Limpiar SQL de comentarios
+    log('🧹 Limpiando comentarios del SQL...', 'yellow');
+    sql = cleanSQL(sql);
     
-    log('✅ Script SQL cargado correctamente\n', 'green');
+    // Extraer queries ejecutables
+    const queries = extractQueries(sql);
+    log(`✅ ${queries.length} queries detectadas para ejecutar\n`, 'green');
 
     // Confirmar antes de continuar
     log('⚠️  ADVERTENCIA:', 'red');
@@ -86,17 +162,15 @@ async function migrate() {
     log('   • Eliminar columna: curso_id de proyectos', 'cyan');
     log('   • Eliminar tabla: tutor_curso', 'cyan');
     log('   • Actualizar constraint único de proyectos', 'cyan');
-    log('   • (OPCIONAL) Eliminar tabla: cursos', 'cyan');
     log('');
 
-    log('📊 Estructura ANTES de la migración:', 'magenta');
+    log('📊 Estructura ANTES:', 'magenta');
     log('   proyectos → curso → promoción + especialidad', 'magenta');
-    log('');
-    log('📊 Estructura DESPUÉS de la migración:', 'green');
+    log('📊 Estructura DESPUÉS:', 'green');
     log('   proyectos → promoción + especialidad (directo)', 'green');
     log('');
 
-    // Esperar 3 segundos para que el usuario pueda leer
+    // Esperar 3 segundos
     log('⏳ Iniciando en 3 segundos... (Ctrl+C para cancelar)', 'yellow');
     await sleep(3000);
 
@@ -106,25 +180,41 @@ async function migrate() {
     
     const startTime = Date.now();
     
-    // Dividir en queries individuales para mejor control
-    const queries = sql.split(';').filter(q => q.trim().length > 0);
+    let executedCount = 0;
+    let skippedCount = 0;
     
-    let queryNum = 1;
-    for (const query of queries) {
-      const trimmedQuery = query.trim();
-      if (trimmedQuery.length > 0 && !trimmedQuery.startsWith('SELECT') && !trimmedQuery.startsWith('SHOW') && !trimmedQuery.startsWith('DESCRIBE')) {
-        try {
-          await connection.query(trimmedQuery);
-          log(`   ✅ Query ${queryNum}/${queries.length} ejecutada`, 'green');
-          queryNum++;
-        } catch (err) {
-          // Si el error es por constraint o columna que ya existe, continuar
-          if (err.code === 'ER_DUP_FIELDNAME' || err.code === 'ER_CANT_DROP_FIELD_OR_KEY') {
-            log(`   ⚠️  Query ${queryNum}/${queries.length} - Ya aplicada previamente`, 'yellow');
-            queryNum++;
-          } else {
-            throw err;
-          }
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
+      
+      try {
+        await connection.query(query);
+        executedCount++;
+        
+        // Mostrar tipo de query ejecutada
+        const firstWord = query.split(/\s+/)[0].toUpperCase();
+        const tableName = extractTableName(query);
+        log(`   ✅ [${i + 1}/${queries.length}] ${firstWord} ${tableName}`, 'green');
+        
+      } catch (err) {
+        // Manejar errores conocidos que son "seguros" de ignorar
+        const safeErrors = {
+          'ER_DUP_FIELDNAME': 'Columna ya existe',
+          'ER_CANT_DROP_FIELD_OR_KEY': 'No se puede eliminar (no existe)',
+          'ER_DUP_KEYNAME': 'Constraint ya existe',
+          'ER_BAD_TABLE_ERROR': 'Tabla no existe',
+          'ER_BAD_FIELD_ERROR': 'Campo no existe',
+          'ER_DROP_INDEX_FK': 'Foreign key relacionada existe'
+        };
+        
+        if (safeErrors[err.code]) {
+          skippedCount++;
+          log(`   ⚠️  [${i + 1}/${queries.length}] ${safeErrors[err.code]} - saltado`, 'yellow');
+        } else {
+          // Error real - mostrar y lanzar
+          log(`\n   ❌ Error en query ${i + 1}:`, 'red');
+          log(`   Tipo: ${err.code || 'UNKNOWN'}`, 'red');
+          log(`   Query: ${query.substring(0, 150)}...`, 'red');
+          throw err;
         }
       }
     }
@@ -133,7 +223,8 @@ async function migrate() {
     const duration = ((endTime - startTime) / 1000).toFixed(2);
 
     log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'cyan');
-    log(`✅ MIGRACIÓN COMPLETADA EN ${duration} segundos\n`, 'green');
+    log(`✅ MIGRACIÓN COMPLETADA EN ${duration} segundos`, 'green');
+    log(`   📊 Ejecutadas: ${executedCount} | Saltadas: ${skippedCount}\n`, 'green');
 
     // Verificaciones post-migración
     log('🔍 Verificando cambios...', 'yellow');
@@ -184,6 +275,9 @@ async function migrate() {
     
     if (stats.sin_promocion > 0) {
       log(`   ⚠️  Sin promoción: ${stats.sin_promocion} (REQUIERE ATENCIÓN)`, 'red');
+      log('', '');
+      log('   💡 Solución: Ejecuta este SQL manualmente:', 'yellow');
+      log('   UPDATE proyectos SET promocion_id = 1, especialidad_id = 1 WHERE promocion_id IS NULL;', 'cyan');
     } else {
       log(`   ✅ Todos los proyectos tienen promoción y especialidad`, 'green');
     }
@@ -204,7 +298,7 @@ async function migrate() {
     }
     
     if (existeCursos) {
-      log('   ℹ️  Tabla cursos conservada (puede eliminarse manualmente si deseas)', 'blue');
+      log('   ℹ️  Tabla cursos conservada (puede eliminarse manualmente)', 'blue');
     } else {
       log('   ✅ Tabla cursos eliminada', 'green');
     }
@@ -223,13 +317,17 @@ async function migrate() {
         AND REFERENCED_TABLE_NAME IS NOT NULL
     `);
     
-    fks.forEach(fk => {
-      log(`   ✅ ${fk.CONSTRAINT_NAME}: ${fk.COLUMN_NAME} → ${fk.REFERENCED_TABLE_NAME}`, 'green');
-    });
+    if (fks.length > 0) {
+      fks.forEach(fk => {
+        log(`   ✅ ${fk.CONSTRAINT_NAME}: ${fk.COLUMN_NAME} → ${fk.REFERENCED_TABLE_NAME}`, 'green');
+      });
+    } else {
+      log('   ℹ️  No se encontraron foreign keys', 'blue');
+    }
     log('');
 
     // 5. Mostrar ejemplo de proyectos
-    log('5️⃣  Vista previa de proyectos:', 'cyan');
+    log('5️⃣  Vista previa de proyectos (primeros 5):', 'cyan');
     const [proyectos] = await connection.query(`
       SELECT 
         p.id,
@@ -242,14 +340,15 @@ async function migrate() {
       LEFT JOIN especialidades e ON e.id = p.especialidad_id
       LEFT JOIN usuarios u ON u.id = p.tutor_id
       WHERE p.eliminado = 0
-      ORDER BY pr.anio DESC, e.nombre, p.titulo
+      ORDER BY p.id DESC
       LIMIT 5
     `);
     
     if (proyectos.length > 0) {
       proyectos.forEach(p => {
-        log(`   📚 ${p.titulo}`, 'green');
-        log(`      └─ ${p.promocion || 'Sin promoción'} - ${p.especialidad || 'Sin especialidad'} - Tutor: ${p.tutor || 'Sin tutor'}`, 'blue');
+        const status = (p.promocion && p.especialidad) ? '✅' : '⚠️';
+        log(`   ${status} ${p.titulo}`, p.promocion ? 'green' : 'yellow');
+        log(`      └─ ${p.promocion || 'Sin promoción'} | ${p.especialidad || 'Sin especialidad'} | ${p.tutor || 'Sin tutor'}`, 'blue');
       });
     } else {
       log('   ℹ️  No hay proyectos activos en la base de datos', 'blue');
@@ -262,13 +361,13 @@ async function migrate() {
     log('═══════════════════════════════════════════════════', 'green');
     log('');
     log('📋 Próximos pasos:', 'cyan');
-    log('   1. ✅ Actualizar el código del backend para usar promocion_id y especialidad_id', 'cyan');
-    log('   2. ✅ Actualizar el frontend (admin.html, tutor.html)', 'cyan');
-    log('   3. ✅ Eliminar referencias a cursos en el código', 'cyan');
-    log('   4. ✅ Probar creación de proyectos con nueva estructura', 'cyan');
-    log('   5. ✅ Si todo funciona, puedes eliminar la tabla cursos manualmente', 'cyan');
+    log('   1. ✅ Actualizar backend: usar promocion_id y especialidad_id', 'cyan');
+    log('   2. ✅ Actualizar frontend: remover referencias a cursos', 'cyan');
+    log('   3. ✅ Probar crear proyectos con nueva estructura', 'cyan');
+    log('   4. ✅ Verificar que todo funciona correctamente', 'cyan');
+    log('   5. 🗑️  (Opcional) Eliminar tabla cursos si ya no la necesitas', 'cyan');
     log('');
-    log('💡 Tip: Si algo sale mal, Railway mantiene backups automáticos', 'yellow');
+    log('💡 Tip: Railway mantiene backups automáticos por 7 días', 'yellow');
     log('');
 
   } catch (error) {
@@ -278,21 +377,23 @@ async function migrate() {
     if (error.code) {
       log(`   Código de error: ${error.code}`, 'red');
     }
+    
     if (error.sqlMessage) {
       log(`   Mensaje SQL: ${error.sqlMessage}`, 'red');
     }
+    
     if (error.sql) {
-      log(`   Query: ${error.sql.substring(0, 200)}...`, 'red');
+      const shortQuery = error.sql.length > 200 ? error.sql.substring(0, 200) + '...' : error.sql;
+      log(`   Query: ${shortQuery}`, 'red');
     }
     
     log(`   ${error.message}`, 'red');
     log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'red');
     
     log('\n💡 Sugerencias:', 'yellow');
-    log('   • Verifica que el archivo "eliminar cursos.sql" existe', 'yellow');
-    log('   • Revisa que las credenciales de la BD sean correctas', 'yellow');
-    log('   • Asegúrate de tener permisos para modificar la estructura', 'yellow');
-    log('   • Railway mantiene backups, puedes restaurar si es necesario', 'yellow');
+    log('   • Verifica permisos de modificación en Railway', 'yellow');
+    log('   • Revisa que la base de datos esté disponible', 'yellow');
+    log('   • Si continúa fallando, contacta soporte de Railway', 'yellow');
     log('');
     
     throw error;
@@ -303,6 +404,20 @@ async function migrate() {
       log('🔌 Conexión a base de datos cerrada\n', 'blue');
     }
   }
+}
+
+// Función auxiliar para extraer nombre de tabla
+function extractTableName(query) {
+  const alterMatch = query.match(/ALTER\s+TABLE\s+(\w+)/i);
+  if (alterMatch) return `(${alterMatch[1]})`;
+  
+  const dropMatch = query.match(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)/i);
+  if (dropMatch) return `(${dropMatch[1]})`;
+  
+  const updateMatch = query.match(/UPDATE\s+(\w+)/i);
+  if (updateMatch) return `(${updateMatch[1]})`;
+  
+  return '';
 }
 
 // Función auxiliar para sleep

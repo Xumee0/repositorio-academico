@@ -6,7 +6,6 @@ const path = require('path');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/usuarios.routes');
 const proyectosRoutes = require('./routes/proyectos.routes');
-const notasRoutes = require('./routes/notas.routes');
 const archivoFinalRoutes = require('./routes/archivoFinal.routes');
 // Agregar nueva ruta
 const descargasRoutes = require('./routes/descargas.routes');
@@ -44,7 +43,6 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', userRoutes);
 app.use('/api/proyectos', proyectosRoutes);
-app.use('/api/notas', notasRoutes);
 app.use('/api/archivo-final', archivoFinalRoutes);
 
 

@@ -450,7 +450,7 @@
 <script>
 requireAuth('admin');
 
-const API_PROMOCIONES = '/api/tutores/promociones';
+const API_PROMOCIONES = '/api/promociones';
 let cache = { proyectos:[], especialidades:[], promociones:[] };
 
 // ============================================
@@ -515,7 +515,7 @@ async function loadAll(){
   try{
     cache.proyectos = await apiFetch('/proyectos');
     cache.especialidades = await apiFetch('/tutores/especialidades');
-    cache.promociones = await apiFetch('/tutores/promociones');
+    cache.promociones = await apiFetch('/promociones');
 
     $('kpiProy').textContent = cache.proyectos.length;
     $('kpiMem').textContent = cache.proyectos.filter(x => x.nombre_archivo).length;

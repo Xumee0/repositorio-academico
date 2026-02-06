@@ -1,440 +1,413 @@
-const router = require('express').Router();
-const db = require('../config/database');
-const { verifyToken } = require('../middlewares/auth');
-const archiver = require('archiver');
-const path = require('path');
+require('dotenv').config();
+const mysql = require('mysql2/promise');
 const fs = require('fs');
-const ExcelJS = require('exceljs');
+const path = require('path');
 
-// =====================================================
-// DESCARGAR TODOS LOS PDFs DE UNA ESPECIALIDAD Y PROMOCIÓN (ZIP)
-// =====================================================
-router.get('/pdfs/:especialidad_id/:promocion_id', verifyToken, async (req, res) => {
-  try {
-    const { id, rol } = req.user;
-    const { especialidad_id, promocion_id } = req.params;
+// Colores para consola
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m'
+};
 
-    // Verificar permisos
-    if (rol === 'tutor') {
-      // Tutor solo puede descargar de sus cursos
-      const [[acceso]] = await db.query(`
-        SELECT 1 FROM tutor_curso tc
-        JOIN cursos c ON c.id = tc.curso_id
-        WHERE tc.tutor_id = ? 
-          AND c.especialidad_id = ? 
-          AND c.promocion_id = ?
-        LIMIT 1
-      `, [id, especialidad_id, promocion_id]);
+function log(message, color = 'reset') {
+  console.log(`${colors[color]}${message}${colors.reset}`);
+}
 
-      if (!acceso) {
-        return res.status(403).json({ msg: 'No tienes acceso a estos proyectos' });
+// Función para limpiar el SQL de comentarios
+function cleanSQL(sql) {
+  // Eliminar comentarios de bloque /* ... */
+  sql = sql.replace(/\/\*[\s\S]*?\*\//g, '');
+  
+  // Eliminar comentarios de línea --
+  sql = sql.split('\n')
+    .map(line => {
+      const commentIndex = line.indexOf('--');
+      if (commentIndex !== -1) {
+        return line.substring(0, commentIndex);
+      }
+      return line;
+    })
+    .join('\n');
+  
+  // Eliminar líneas vacías y espacios extra
+  sql = sql.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .join('\n');
+  
+  return sql;
+}
+
+// Función para extraer queries ejecutables
+function extractQueries(sql) {
+  const queries = [];
+  const statements = sql.split(';');
+  
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+    
+    // Solo incluir queries que empiecen con palabras clave SQL válidas
+    if (trimmed.length > 0) {
+      const firstWord = trimmed.split(/\s+/)[0].toUpperCase();
+      const validKeywords = ['ALTER', 'CREATE', 'DROP', 'UPDATE', 'INSERT', 'DELETE', 'TRUNCATE', 'RENAME'];
+      
+      if (validKeywords.includes(firstWord)) {
+        queries.push(trimmed);
       }
     }
+  }
+  
+  return queries;
+}
 
-    // Obtener información de especialidad y promoción
-    const [[info]] = await db.query(`
-      SELECT 
-        e.nombre AS especialidad,
-        pr.anio AS promocion
-      FROM especialidades e, promociones pr
-      WHERE e.id = ? AND pr.id = ?
-    `, [especialidad_id, promocion_id]);
+async function migrate() {
+  log('\n╔════════════════════════════════════════════════════╗', 'cyan');
+  log('║   MIGRACIÓN: ELIMINAR CURSOS - RAILWAY            ║', 'cyan');
+  log('║   Sistema Repositorio Académico v3.0              ║', 'cyan');
+  log('╚════════════════════════════════════════════════════╝\n', 'cyan');
 
-    if (!info) {
-      return res.status(404).json({ msg: 'Especialidad o promoción no encontrada' });
-    }
+  // Configuración de conexión - PRIORIZAR CREDENCIALES PÚBLICAS
+  const config = {
+    host: process.env.DB_HOST_PUBLIC || process.env.MYSQLHOST || process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT_PUBLIC || process.env.MYSQLPORT || process.env.DB_PORT || '3306'),
+    user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
+    password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD,
+    database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway',
+    connectTimeout: 10000
+  };
 
-    // Obtener archivos
-    const [archivos] = await db.query(`
-      SELECT 
-        af.nombre_archivo,
-        af.nombre_visible,
-        p.titulo AS proyecto,
-        CONCAT(c.nombre, ' ', c.paralelo) AS curso,
-        u.nombre AS tutor
-      FROM archivo_final af
-      JOIN proyectos p ON p.id = af.proyecto_id
-      JOIN cursos c ON c.id = p.curso_id
-      JOIN usuarios u ON u.id = p.tutor_id
-      WHERE af.eliminado = 0 
-        AND p.eliminado = 0
-        AND c.especialidad_id = ?
-        AND c.promocion_id = ?
-      ORDER BY c.nombre, p.titulo
-    `, [especialidad_id, promocion_id]);
+  log('📋 Configuración de conexión:', 'blue');
+  log(`   Host: ${config.host}`, 'blue');
+  log(`   Port: ${config.port}`, 'blue');
+  log(`   User: ${config.user}`, 'blue');
+  log(`   Database: ${config.database}`, 'blue');
+  
+  // Detectar si estamos usando hostname interno
+  if (config.host && config.host.includes('.railway.internal')) {
+    log('', '');
+    log('⚠️  ADVERTENCIA: Usando hostname interno de Railway', 'yellow');
+    log('   Esto solo funciona desde DENTRO de Railway.', 'yellow');
+    log('', '');
+    log('💡 Para ejecutar DESDE TU COMPUTADORA:', 'cyan');
+    log('   1. Ve a Railway Dashboard → Tu base de datos', 'cyan');
+    log('   2. Click en "Connect"', 'cyan');
+    log('   3. Copia el "Public Network Host"', 'cyan');
+    log('   4. Agrega a tu archivo .env:', 'cyan');
+    log('      DB_HOST_PUBLIC=monorail.proxy.rlwy.net', 'green');
+    log('      DB_PORT_PUBLIC=12345', 'green');
+    log('   5. Vuelve a ejecutar este script', 'cyan');
+    log('', '');
+  }
+  
+  log('');
 
-    if (archivos.length === 0) {
-      return res.status(404).json({ 
-        msg: 'No hay memorias técnicas disponibles para esta especialidad y promoción' 
-      });
-    }
+  let connection;
 
-    // Crear ZIP
-    const archive = archiver('zip', { 
-      zlib: { level: 9 } // Máxima compresión
-    });
+  try {
+    // Crear conexión
+    log('🔌 Conectando a la base de datos...', 'yellow');
+    connection = await mysql.createConnection(config);
+    log('✅ Conexión establecida exitosamente\n', 'green');
 
-    const nombreZip = `Memorias_Tecnicas_${info.especialidad.replace(/\s/g, '_')}_${info.promocion}.zip`;
-    res.attachment(nombreZip);
+    // Leer el archivo SQL
+    log('📄 Cargando script de migración...', 'yellow');
+    const sqlPath = path.join(__dirname, 'eliminar cursos.sql');
     
-    // Configurar headers
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreZip}"`);
+    if (!fs.existsSync(sqlPath)) {
+      throw new Error(`No se encuentra el archivo: ${sqlPath}`);
+    }
 
-    // Pipe del archive a la respuesta
-    archive.pipe(res);
+    let sql = fs.readFileSync(sqlPath, 'utf8');
+    
+    // Limpiar SQL de comentarios
+    log('🧹 Limpiando comentarios del SQL...', 'yellow');
+    sql = cleanSQL(sql);
+    
+    // Extraer queries ejecutables
+    const queries = extractQueries(sql);
+    log(`✅ ${queries.length} queries detectadas para ejecutar\n`, 'green');
 
-    const uploadsPath = path.join(__dirname, '../uploads');
-    let archivosAgregados = 0;
+    // Confirmar antes de continuar
+    log('⚠️  ADVERTENCIA:', 'red');
+    log('   Esta migración modificará la estructura de tu base de datos.', 'yellow');
+    log('   ⚡ Railway hace backups automáticos, pero es buena práctica verificar.', 'yellow');
+    log('');
 
-    // Agregar archivos al ZIP
-    archivos.forEach((archivo, index) => {
-      const filePath = path.join(uploadsPath, archivo.nombre_archivo);
+    // Mostrar resumen de cambios
+    log('📝 Cambios que se aplicarán:', 'cyan');
+    log('   • Agregar columnas: promocion_id y especialidad_id a proyectos', 'cyan');
+    log('   • Migrar datos existentes desde cursos', 'cyan');
+    log('   • Eliminar columna: curso_id de proyectos', 'cyan');
+    log('   • Eliminar tabla: tutor_curso', 'cyan');
+    log('   • Actualizar constraint único de proyectos', 'cyan');
+    log('   • (OPCIONAL) Eliminar tabla: cursos', 'cyan');
+    log('');
+
+    log('📊 Estructura ANTES de la migración:', 'magenta');
+    log('   proyectos → curso → promoción + especialidad', 'magenta');
+    log('');
+    log('📊 Estructura DESPUÉS de la migración:', 'green');
+    log('   proyectos → promoción + especialidad (directo)', 'green');
+    log('');
+
+    // Esperar 3 segundos para que el usuario pueda leer
+    log('⏳ Iniciando en 3 segundos... (Ctrl+C para cancelar)', 'yellow');
+    await sleep(3000);
+
+    // Ejecutar migración
+    log('\n🚀 EJECUTANDO MIGRACIÓN...', 'bright');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'cyan');
+    
+    const startTime = Date.now();
+    
+    let executedCount = 0;
+    let skippedCount = 0;
+    
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
       
-      if (fs.existsSync(filePath)) {
-        // Crear nombre descriptivo para el archivo en el ZIP
-        const extension = path.extname(archivo.nombre_archivo);
-        const nombreEnZip = `${archivo.curso}/${archivo.proyecto}${extension}`;
+      try {
+        await connection.query(query);
+        executedCount++;
         
-        archive.file(filePath, { name: nombreEnZip });
-        archivosAgregados++;
-      } else {
-        console.warn(`Archivo no encontrado: ${archivo.nombre_archivo}`);
+        // Mostrar tipo de query ejecutada
+        const firstWord = query.split(/\s+/)[0].toUpperCase();
+        log(`   ✅ [${i + 1}/${queries.length}] ${firstWord}`, 'green');
+        
+      } catch (err) {
+        // Manejar errores conocidos que son "seguros" de ignorar
+        if (err.code === 'ER_DUP_FIELDNAME') {
+          skippedCount++;
+          log(`   ⚠️  [${i + 1}/${queries.length}] Columna ya existe - saltado`, 'yellow');
+        } else if (err.code === 'ER_CANT_DROP_FIELD_OR_KEY') {
+          skippedCount++;
+          log(`   ⚠️  [${i + 1}/${queries.length}] No se puede eliminar (no existe) - saltado`, 'yellow');
+        } else if (err.code === 'ER_DUP_KEYNAME') {
+          skippedCount++;
+          log(`   ⚠️  [${i + 1}/${queries.length}] Constraint ya existe - saltado`, 'yellow');
+        } else if (err.code === 'ER_BAD_TABLE_ERROR') {
+          skippedCount++;
+          log(`   ⚠️  [${i + 1}/${queries.length}] Tabla no existe - saltado`, 'yellow');
+        } else {
+          // Error real - lanzar excepción
+          log(`\n   ❌ Error en query ${i + 1}:`, 'red');
+          log(`   ${query.substring(0, 100)}...`, 'red');
+          throw err;
+        }
       }
-    });
-
-    // Agregar un archivo README con información
-    const readmeContent = `
-MEMORIAS TÉCNICAS
-=================
-
-Especialidad: ${info.especialidad}
-Promoción: ${info.promocion}
-Fecha de descarga: ${new Date().toLocaleString('es-EC')}
-Total de archivos: ${archivosAgregados}
-
-Este archivo ZIP contiene las memorias técnicas de los proyectos de grado.
-Los archivos están organizados por curso.
-
----
-Generado por Sistema de Repositorio Académico
-    `.trim();
-
-    archive.append(readmeContent, { name: 'README.txt' });
-
-    // Finalizar el archivo
-    await archive.finalize();
-
-    console.log(`ZIP creado: ${nombreZip} - ${archivosAgregados} archivos`);
-
-  } catch (err) {
-    console.error('Error al generar ZIP:', err);
-    
-    if (!res.headersSent) {
-      res.status(500).json({ msg: 'Error al generar descarga' });
     }
-  }
-});
+    
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
 
-// =====================================================
-// DESCARGAR EXCEL GENERAL (SOLO ADMIN)
-// =====================================================
-router.get('/excel', verifyToken, async (req, res) => {
-  try {
-    const { rol } = req.user;
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'cyan');
+    log(`✅ MIGRACIÓN COMPLETADA EN ${duration} segundos`, 'green');
+    log(`   📊 Ejecutadas: ${executedCount} | Saltadas: ${skippedCount}\n`, 'green');
 
-    // Solo administradores
-    if (rol !== 'admin') {
-      return res.status(403).json({ 
-        msg: 'Solo administradores pueden descargar el Excel general' 
+    // Verificaciones post-migración
+    log('🔍 Verificando cambios...', 'yellow');
+    log('');
+
+    // 1. Verificar estructura de proyectos
+    log('1️⃣  Estructura de tabla proyectos:', 'cyan');
+    const [columnasProyectos] = await connection.query('DESCRIBE proyectos');
+    
+    const tienePromocionId = columnasProyectos.some(c => c.Field === 'promocion_id');
+    const tieneEspecialidadId = columnasProyectos.some(c => c.Field === 'especialidad_id');
+    const tieneCursoId = columnasProyectos.some(c => c.Field === 'curso_id');
+    
+    if (tienePromocionId) {
+      log('   ✅ Columna promocion_id presente', 'green');
+    } else {
+      log('   ❌ Columna promocion_id NO encontrada', 'red');
+    }
+    
+    if (tieneEspecialidadId) {
+      log('   ✅ Columna especialidad_id presente', 'green');
+    } else {
+      log('   ❌ Columna especialidad_id NO encontrada', 'red');
+    }
+    
+    if (!tieneCursoId) {
+      log('   ✅ Columna curso_id eliminada correctamente', 'green');
+    } else {
+      log('   ⚠️  Columna curso_id AÚN EXISTE (pendiente de eliminar)', 'yellow');
+    }
+    log('');
+
+    // 2. Verificar integridad de datos
+    log('2️⃣  Integridad de datos:', 'cyan');
+    const [[stats]] = await connection.query(`
+      SELECT 
+        COUNT(*) as total_proyectos,
+        COUNT(promocion_id) as con_promocion,
+        COUNT(especialidad_id) as con_especialidad,
+        COUNT(*) - COUNT(promocion_id) as sin_promocion
+      FROM proyectos
+      WHERE eliminado = 0
+    `);
+    
+    log(`   📊 Total proyectos: ${stats.total_proyectos}`, 'green');
+    log(`   ✅ Con promoción: ${stats.con_promocion}`, 'green');
+    log(`   ✅ Con especialidad: ${stats.con_especialidad}`, 'green');
+    
+    if (stats.sin_promocion > 0) {
+      log(`   ⚠️  Sin promoción: ${stats.sin_promocion} (REQUIERE ATENCIÓN)`, 'red');
+    } else {
+      log(`   ✅ Todos los proyectos tienen promoción y especialidad`, 'green');
+    }
+    log('');
+
+    // 3. Verificar tablas
+    log('3️⃣  Verificación de tablas:', 'cyan');
+    const [tablas] = await connection.query('SHOW TABLES');
+    const nombreBD = `Tables_in_${config.database}`;
+    
+    const existeTutorCurso = tablas.some(t => t[nombreBD] === 'tutor_curso');
+    const existeCursos = tablas.some(t => t[nombreBD] === 'cursos');
+    
+    if (!existeTutorCurso) {
+      log('   ✅ Tabla tutor_curso eliminada correctamente', 'green');
+    } else {
+      log('   ⚠️  Tabla tutor_curso AÚN EXISTE', 'yellow');
+    }
+    
+    if (existeCursos) {
+      log('   ℹ️  Tabla cursos conservada (puede eliminarse manualmente si deseas)', 'blue');
+    } else {
+      log('   ✅ Tabla cursos eliminada', 'green');
+    }
+    log('');
+
+    // 4. Verificar foreign keys
+    log('4️⃣  Foreign keys de proyectos:', 'cyan');
+    const [fks] = await connection.query(`
+      SELECT 
+        CONSTRAINT_NAME,
+        COLUMN_NAME,
+        REFERENCED_TABLE_NAME
+      FROM information_schema.KEY_COLUMN_USAGE
+      WHERE TABLE_NAME = 'proyectos' 
+        AND TABLE_SCHEMA = DATABASE()
+        AND REFERENCED_TABLE_NAME IS NOT NULL
+    `);
+    
+    if (fks.length > 0) {
+      fks.forEach(fk => {
+        log(`   ✅ ${fk.CONSTRAINT_NAME}: ${fk.COLUMN_NAME} → ${fk.REFERENCED_TABLE_NAME}`, 'green');
       });
+    } else {
+      log('   ℹ️  No se encontraron foreign keys', 'blue');
     }
+    log('');
 
-    // Obtener datos completos
-    const [datos] = await db.query(`
+    // 5. Mostrar ejemplo de proyectos
+    log('5️⃣  Vista previa de proyectos:', 'cyan');
+    const [proyectos] = await connection.query(`
       SELECT 
-        pr.anio AS Promocion,
-        e.nombre AS Especialidad,
-        CONCAT(c.nombre, ' ', c.paralelo) AS Curso,
-        p.titulo AS Proyecto,
-        p.descripcion AS Descripcion,
-        p.estado AS Estado,
-        u.nombre AS Tutor,
-        COALESCE(AVG(n.calificacion), 0) AS Calificacion_Promedio,
-        COUNT(DISTINCT n.id) AS Numero_Calificaciones,
-        IF(af.id IS NOT NULL, 'Sí', 'No') AS Memoria_Tecnica,
-        af.nombre_visible AS Nombre_Archivo,
-        p.created_at AS Fecha_Creacion,
-        p.updated_at AS Fecha_Actualizacion
+        p.id,
+        p.titulo,
+        pr.anio AS promocion,
+        e.nombre AS especialidad,
+        u.nombre AS tutor
       FROM proyectos p
-      JOIN cursos c ON c.id = p.curso_id
-      JOIN especialidades e ON e.id = c.especialidad_id
-      JOIN promociones pr ON pr.id = c.promocion_id
-      JOIN usuarios u ON u.id = p.tutor_id
-      LEFT JOIN notas n ON n.proyecto_id = p.id
-      LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
+      LEFT JOIN promociones pr ON pr.id = p.promocion_id
+      LEFT JOIN especialidades e ON e.id = p.especialidad_id
+      LEFT JOIN usuarios u ON u.id = p.tutor_id
       WHERE p.eliminado = 0
-      GROUP BY p.id
-      ORDER BY pr.anio DESC, e.nombre, c.nombre, p.titulo
+      ORDER BY pr.anio DESC, e.nombre, p.titulo
+      LIMIT 5
     `);
-
-    // Crear libro de Excel
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Sistema Repositorio Académico';
-    workbook.created = new Date();
-    workbook.modified = new Date();
-
-    // Hoja principal
-    const worksheet = workbook.addWorksheet('Proyectos Completo');
-
-    // Definir columnas
-    worksheet.columns = [
-      { header: 'Promoción', key: 'Promocion', width: 12 },
-      { header: 'Especialidad', key: 'Especialidad', width: 20 },
-      { header: 'Curso', key: 'Curso', width: 15 },
-      { header: 'Proyecto', key: 'Proyecto', width: 40 },
-      { header: 'Descripción', key: 'Descripcion', width: 50 },
-      { header: 'Estado', key: 'Estado', width: 15 },
-      { header: 'Tutor', key: 'Tutor', width: 30 },
-      { header: 'Calificación Promedio', key: 'Calificacion_Promedio', width: 20 },
-      { header: 'N° Calificaciones', key: 'Numero_Calificaciones', width: 18 },
-      { header: 'Memoria Técnica', key: 'Memoria_Tecnica', width: 18 },
-      { header: 'Nombre Archivo', key: 'Nombre_Archivo', width: 40 },
-      { header: 'Fecha Creación', key: 'Fecha_Creacion', width: 20 },
-      { header: 'Última Actualización', key: 'Fecha_Actualizacion', width: 20 }
-    ];
-
-    // Estilo de encabezados
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' }
-    };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-    headerRow.height = 25;
-
-    // Agregar datos
-    datos.forEach((row, index) => {
-      const dataRow = worksheet.addRow(row);
-      
-      // Alternar colores de filas
-      if (index % 2 === 0) {
-        dataRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFF5F5F5' }
-        };
-      }
-
-      // Formatear calificación
-      dataRow.getCell('Calificacion_Promedio').numFmt = '0.00';
-      
-      // Colorear estado
-      const estadoCell = dataRow.getCell('Estado');
-      switch (row.Estado) {
-        case 'aprobado':
-          estadoCell.font = { color: { argb: 'FF28A745' }, bold: true };
-          break;
-        case 'rechazado':
-          estadoCell.font = { color: { argb: 'FFDC3545' }, bold: true };
-          break;
-        case 'finalizado':
-          estadoCell.font = { color: { argb: 'FF007BFF' }, bold: true };
-          break;
-      }
-
-      // Colorear memoria técnica
-      const memoriaCell = dataRow.getCell('Memoria_Tecnica');
-      if (row.Memoria_Tecnica === 'Sí') {
-        memoriaCell.font = { color: { argb: 'FF28A745' }, bold: true };
-      } else {
-        memoriaCell.font = { color: { argb: 'FFDC3545' } };
-      }
-    });
-
-    // Agregar filtros automáticos
-    worksheet.autoFilter = {
-      from: 'A1',
-      to: `M1`
-    };
-
-    // Congelar primera fila
-    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-
-    // Crear hoja de resumen
-    const resumenSheet = workbook.addWorksheet('Resumen');
     
-    // Estadísticas generales
-    const [[stats]] = await db.query(`
-      SELECT 
-        COUNT(DISTINCT pr.id) AS total_promociones,
-        COUNT(DISTINCT e.id) AS total_especialidades,
-        COUNT(DISTINCT c.id) AS total_cursos,
-        COUNT(DISTINCT p.id) AS total_proyectos,
-        COUNT(DISTINCT CASE WHEN af.id IS NOT NULL THEN p.id END) AS proyectos_con_memoria,
-        COUNT(DISTINCT CASE WHEN n.id IS NOT NULL THEN p.id END) AS proyectos_calificados
-      FROM proyectos p
-      JOIN cursos c ON c.id = p.curso_id
-      JOIN especialidades e ON e.id = c.especialidad_id
-      JOIN promociones pr ON pr.id = c.promocion_id
-      LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
-      LEFT JOIN notas n ON n.proyecto_id = p.id
-      WHERE p.eliminado = 0
-    `);
+    if (proyectos.length > 0) {
+      proyectos.forEach(p => {
+        log(`   📚 ${p.titulo}`, 'green');
+        log(`      └─ ${p.promocion || 'Sin promoción'} - ${p.especialidad || 'Sin especialidad'} - Tutor: ${p.tutor || 'Sin tutor'}`, 'blue');
+      });
+    } else {
+      log('   ℹ️  No hay proyectos activos en la base de datos', 'blue');
+    }
+    log('');
 
-    resumenSheet.addRow(['RESUMEN GENERAL']);
-    resumenSheet.addRow(['']);
-    resumenSheet.addRow(['Concepto', 'Cantidad']);
-    resumenSheet.addRow(['Promociones', stats.total_promociones]);
-    resumenSheet.addRow(['Especialidades', stats.total_especialidades]);
-    resumenSheet.addRow(['Cursos', stats.total_cursos]);
-    resumenSheet.addRow(['Proyectos Totales', stats.total_proyectos]);
-    resumenSheet.addRow(['Proyectos con Memoria Técnica', stats.proyectos_con_memoria]);
-    resumenSheet.addRow(['Proyectos Calificados', stats.proyectos_calificados]);
-    resumenSheet.addRow(['']);
-    resumenSheet.addRow(['Fecha de generación:', new Date().toLocaleString('es-EC')]);
+    // Resumen final
+    log('═══════════════════════════════════════════════════', 'green');
+    log('🎉 MIGRACIÓN COMPLETADA EXITOSAMENTE', 'green');
+    log('═══════════════════════════════════════════════════', 'green');
+    log('');
+    log('📋 Próximos pasos:', 'cyan');
+    log('   1. ✅ Actualizar el código del backend para usar promocion_id y especialidad_id', 'cyan');
+    log('   2. ✅ Actualizar el frontend (admin.html, tutor.html)', 'cyan');
+    log('   3. ✅ Eliminar referencias a cursos en el código', 'cyan');
+    log('   4. ✅ Probar creación de proyectos con nueva estructura', 'cyan');
+    log('   5. ✅ Si todo funciona, puedes eliminar la tabla cursos manualmente', 'cyan');
+    log('');
+    log('💡 Tip: Si algo sale mal, Railway mantiene backups automáticos', 'yellow');
+    log('');
 
-    // Estilo del resumen
-    resumenSheet.getColumn(1).width = 35;
-    resumenSheet.getColumn(2).width = 20;
-    resumenSheet.getRow(1).font = { bold: true, size: 14 };
-    resumenSheet.getRow(3).font = { bold: true };
-    resumenSheet.getRow(3).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE2E2E2' }
-    };
-
-    // Generar nombre del archivo
-    const fechaHoy = new Date().toISOString().split('T')[0];
-    const nombreArchivo = `Reporte_General_Proyectos_${fechaHoy}.xlsx`;
-
-    // Configurar headers de respuesta
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${nombreArchivo}"`
-    );
-
-    // Escribir y enviar
-    await workbook.xlsx.write(res);
-    res.end();
-
-    console.log(`Excel generado: ${nombreArchivo}`);
-
-  } catch (err) {
-    console.error('Error al generar Excel:', err);
+  } catch (error) {
+    log('\n❌ ERROR DURANTE LA MIGRACIÓN:', 'red');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'red');
     
-    if (!res.headersSent) {
-      res.status(500).json({ msg: 'Error al generar Excel' });
+    if (error.code) {
+      log(`   Código de error: ${error.code}`, 'red');
+    }
+    
+    // Mensaje específico para error de DNS/conexión
+    if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND') {
+      log('', '');
+      log('   🔍 ERROR DE CONEXIÓN - No se puede resolver el hostname', 'red');
+      log('', '');
+      log('   💡 SOLUCIÓN: Usa credenciales públicas de Railway', 'yellow');
+      log('   Ver: COMO_OBTENER_CREDENCIALES_RAILWAY.md', 'cyan');
+      log('', '');
+    }
+    
+    if (error.sqlMessage) {
+      log(`   Mensaje SQL: ${error.sqlMessage}`, 'red');
+    }
+    if (error.sql) {
+      const shortQuery = error.sql.length > 200 ? error.sql.substring(0, 200) + '...' : error.sql;
+      log(`   Query: ${shortQuery}`, 'red');
+    }
+    
+    log(`   ${error.message}`, 'red');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'red');
+    
+    log('\n💡 Sugerencias:', 'yellow');
+    log('   • Verifica que el archivo "eliminar cursos.sql" existe', 'yellow');
+    log('   • Revisa que las credenciales de la BD sean correctas', 'yellow');
+    log('   • Asegúrate de tener permisos para modificar la estructura', 'yellow');
+    log('   • Railway mantiene backups, puedes restaurar si es necesario', 'yellow');
+    log('');
+    
+    throw error;
+    
+  } finally {
+    if (connection) {
+      await connection.end();
+      log('🔌 Conexión a base de datos cerrada\n', 'blue');
     }
   }
-});
+}
 
-// =====================================================
-// DESCARGAR EXCEL POR ESPECIALIDAD/PROMOCIÓN
-// =====================================================
-router.get('/excel/:especialidad_id/:promocion_id', verifyToken, async (req, res) => {
-  try {
-    const { id, rol } = req.user;
-    const { especialidad_id, promocion_id } = req.params;
+// Función auxiliar para sleep
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    // Verificar permisos
-    if (rol === 'tutor') {
-      const [[acceso]] = await db.query(`
-        SELECT 1 FROM tutor_curso tc
-        JOIN cursos c ON c.id = tc.curso_id
-        WHERE tc.tutor_id = ? 
-          AND c.especialidad_id = ? 
-          AND c.promocion_id = ?
-        LIMIT 1
-      `, [id, especialidad_id, promocion_id]);
-
-      if (!acceso) {
-        return res.status(403).json({ msg: 'No tienes acceso a estos datos' });
-      }
-    }
-
-    // Obtener datos filtrados
-    const [datos] = await db.query(`
-      SELECT 
-        CONCAT(c.nombre, ' ', c.paralelo) AS Curso,
-        p.titulo AS Proyecto,
-        p.descripcion AS Descripcion,
-        p.estado AS Estado,
-        u.nombre AS Tutor,
-        COALESCE(AVG(n.calificacion), 0) AS Calificacion_Promedio,
-        IF(af.id IS NOT NULL, 'Sí', 'No') AS Memoria_Tecnica
-      FROM proyectos p
-      JOIN cursos c ON c.id = p.curso_id
-      JOIN usuarios u ON u.id = p.tutor_id
-      LEFT JOIN notas n ON n.proyecto_id = p.id
-      LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
-      WHERE p.eliminado = 0
-        AND c.especialidad_id = ?
-        AND c.promocion_id = ?
-      GROUP BY p.id
-      ORDER BY c.nombre, p.titulo
-    `, [especialidad_id, promocion_id]);
-
-    if (datos.length === 0) {
-      return res.status(404).json({ msg: 'No hay datos para esta combinación' });
-    }
-
-    // Obtener info de especialidad y promoción
-    const [[info]] = await db.query(`
-      SELECT e.nombre AS especialidad, pr.anio AS promocion
-      FROM especialidades e, promociones pr
-      WHERE e.id = ? AND pr.id = ?
-    `, [especialidad_id, promocion_id]);
-
-    // Crear Excel
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Proyectos');
-
-    worksheet.columns = [
-      { header: 'Curso', key: 'Curso', width: 15 },
-      { header: 'Proyecto', key: 'Proyecto', width: 40 },
-      { header: 'Descripción', key: 'Descripcion', width: 50 },
-      { header: 'Estado', key: 'Estado', width: 15 },
-      { header: 'Tutor', key: 'Tutor', width: 30 },
-      { header: 'Calificación', key: 'Calificacion_Promedio', width: 15 },
-      { header: 'Memoria', key: 'Memoria_Tecnica', width: 15 }
-    ];
-
-    // Estilo de encabezados
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' }
-    };
-
-    // Agregar datos
-    datos.forEach(row => {
-      worksheet.addRow(row);
-    });
-
-    const nombreArchivo = `Proyectos_${info.especialidad.replace(/\s/g, '_')}_${info.promocion}.xlsx`;
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
-
-    await workbook.xlsx.write(res);
-    res.end();
-
-  } catch (err) {
-    console.error('Error al generar Excel filtrado:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ msg: 'Error al generar Excel' });
-    }
-  }
-});
-
-module.exports = router;
+// Ejecutar migración
+migrate()
+  .then(() => {
+    log('✨ Proceso completado con éxito', 'green');
+    process.exit(0);
+  })
+  .catch((err) => {
+    log('💥 El proceso finalizó con errores', 'red');
+    process.exit(1);
+  });

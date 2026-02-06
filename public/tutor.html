@@ -38,12 +38,6 @@
     <!-- DASHBOARD -->
     <section id="home">
       <div class="grid">
-        <!-- ✅ NUEVO: KPI Promociones (para que no sea null) -->
-        <div class="card col-4">
-          <h3>Promociones</h3>
-          <div class="kpi" id="kpiPromos">—</div>
-          <div class="hint">Disponibles</div>
-        </div>
 
         <div class="card col-4">
           <h3>Proyectos</h3>
@@ -268,11 +262,9 @@ async function loadInicial(){
     // Cargar estadísticas
     const stats = await apiFetch('/tutores/estadisticas');
 
-    const elPromos = $('kpiPromos');
     const elProy   = $('kpiProy');
     const elFiles  = $('kpiFiles');
 
-    if (elPromos) elPromos.textContent = stats.total_promociones;
     if (elProy)   elProy.textContent   = stats.total_proyectos;
     if (elFiles)  elFiles.textContent  = stats.proyectos_con_archivo;
 

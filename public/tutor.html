@@ -13,14 +13,14 @@
       <div class="brand-badge">RA</div>
       <div>
         <div class="brand-title">Tutor</div>
-        <div class="brand-sub">Gestión de Proyectos</div>
+        <div class="brand-sub">Gestión de Memorias Técnicas</div>
       </div>
     </div>
 
     <div class="nav">
       <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
-      <button id="navCursos" onclick="show('cursos')">Mis cursos</button>
-      <button id="navProyectos" onclick="show('proyectos')">Crear Proyecto</button>
+      <button id="navProyectos" onclick="show('proyectos')">Proyectos</button>
+      <button id="navCrear" onclick="show('crear')">Crear Proyecto</button>
       <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
     </div>
   </aside>
@@ -39,19 +39,19 @@
     <section id="home">
       <div class="grid">
         <div class="card col-4">
-          <h3>Cursos asignados</h3>
-          <div class="kpi" id="kpiCursos">—</div>
+          <h3>Promociones</h3>
+          <div class="kpi" id="kpiPromos">—</div>
+          <div class="hint">Totales</div>
+        </div>
+
+        <div class="card col-4">
+          <h3>Proyectos</h3>
+          <div class="kpi" id="kpiProy">—</div>
           <div class="hint">En el sistema</div>
         </div>
 
         <div class="card col-4">
-          <h3>Proyectos (curso actual)</h3>
-          <div class="kpi" id="kpiProy">—</div>
-          <div class="hint">Temas registrados</div>
-        </div>
-
-        <div class="card col-4">
-          <h3>Memorias técnicas</h3>
+          <h3>Memorias Técnicas</h3>
           <div class="kpi" id="kpiFiles">—</div>
           <div class="hint">PDFs subidos</div>
         </div>
@@ -59,37 +59,44 @@
         <div class="card col-12">
           <h3>Acceso rápido</h3>
           <div style="color:var(--muted); font-size:13px;">
-            Ve a <b>"Mis cursos"</b>, selecciona un curso, sube memorias técnicas y califica.
+            Ve a <b>"Proyectos"</b>, selecciona promoción y especialidad para gestionar las memorias técnicas.
           </div>
           <div style="height:10px"></div>
-          <button class="btn" onclick="show('cursos')">Ir a Mis cursos</button>
+          <button class="btn" onclick="show('proyectos')">Ver Proyectos</button>
         </div>
       </div>
     </section>
 
-    <!-- MIS CURSOS -->
-    <section id="cursos" style="display:none;">
+    <!-- PROYECTOS -->
+    <section id="proyectos" style="display:none;">
       <div class="grid">
         <div class="card col-4">
-          <h3>Seleccionar curso</h3>
+          <h3>Filtros</h3>
 
-          <label style="font-size:13px; color:var(--muted);">Curso</label>
-          <select class="input" id="cursoSel" onchange="cargarCurso()"></select>
+          <label style="font-size:13px; color:var(--muted);">Promoción</label>
+          <select class="input" id="promocionSel" onchange="cargarProyectos()">
+            <option value="">Seleccionar...</option>
+          </select>
+
+          <label style="font-size:13px; color:var(--muted); margin-top:12px;">Especialidad</label>
+          <select class="input" id="especialidadSel" onchange="cargarProyectos()">
+            <option value="">Seleccionar...</option>
+          </select>
 
           <div style="height:10px"></div>
-          <div id="cursoInfo" style="color:var(--muted); font-size:13px;"></div>
+          <div id="filtrosInfo" style="color:var(--muted); font-size:13px;"></div>
 
           <div style="height:12px"></div>
-          <button class="btn" onclick="cargarCurso()">Actualizar</button>
-          <button class="btn success" onclick="descargarMemoriasTecnicas()">
+          <button class="btn" onclick="cargarProyectos()">Actualizar</button>
+          <button class="btn success" onclick="descargarMemoriasTecnicas()" id="btnDescargar" disabled>
             📥 Descargar Memorias (ZIP)
           </button>
         </div>
 
         <div class="card col-8">
-          <h3>Proyectos del curso</h3>
+          <h3>Proyectos / Memorias Técnicas</h3>
           <div style="color:var(--muted); font-size:13px;">
-            Cada proyecto representa un tema. Puedes subir la memoria técnica y calificar.
+            Selecciona una promoción y especialidad para ver los proyectos.
           </div>
 
           <div style="height:10px"></div>
@@ -115,15 +122,22 @@
     </section>
 
     <!-- CREAR PROYECTO -->
-    <section id="proyectos" style="display:none;">
+    <section id="crear" style="display:none;">
       <div class="card">
         <h3>Crear Nuevo Proyecto</h3>
         <div style="color:var(--muted); font-size:13px; margin-bottom:20px;">
-          Un proyecto representa un tema de memoria técnica para un curso específico.
+          Un proyecto representa un tema de memoria técnica para una promoción y especialidad específica.
         </div>
 
-        <label>Curso</label>
-        <select class="input" id="cursoNuevo"></select>
+        <label>Promoción</label>
+        <select class="input" id="promocionNuevo">
+          <option value="">Seleccionar...</option>
+        </select>
+
+        <label>Especialidad</label>
+        <select class="input" id="especialidadNuevo">
+          <option value="">Seleccionar...</option>
+        </select>
 
         <label>Título del Proyecto (Tema)</label>
         <input class="input" id="tituloNuevo" placeholder="Ej: Sistema de Gestión Académica">
@@ -167,69 +181,94 @@
 requireAuth('tutor');
 
 let cache = {
-  cursos: [],
-  cursoActual: null,
+  promociones: [],
+  especialidades: [],
   proyectos: [],
+  promocionActual: null,
+  especialidadActual: null,
   proyectoIdUpload: null
 };
 
 function setActive(btnId){
-  ['navHome','navCursos','navProyectos'].forEach(id=>$(id).classList.remove('active'));
+  ['navHome','navProyectos','navCrear'].forEach(id=>$(id).classList.remove('active'));
   $(btnId).classList.add('active');
 }
 
 function show(section){
-  ['home','cursos','proyectos'].forEach(s=>$(s).style.display='none');
+  ['home','proyectos','crear'].forEach(s=>$(s).style.display='none');
   $(section).style.display='block';
   setActive('nav' + section.charAt(0).toUpperCase() + section.slice(1).replace('home','Home'));
 }
 
-async function loadCursos(){
+async function loadInicial(){
   try{
-    cache.cursos = await apiFetch('/tutores/cursos');
-    $('kpiCursos').textContent = cache.cursos.length;
+    // Cargar promociones
+    cache.promociones = await apiFetch('/tutores/promociones');
+    
+    // Cargar especialidades
+    cache.especialidades = await apiFetch('/tutores/especialidades');
+    
+    // Cargar estadísticas
+    const stats = await apiFetch('/tutores/estadisticas');
+    $('kpiPromos').textContent = stats.total_promociones;
+    $('kpiProy').textContent = stats.total_proyectos;
+    $('kpiFiles').textContent = stats.proyectos_con_archivo;
 
     // Llenar selectores
-    const html = cache.cursos.map(c => `
-      <option value="${c.id}">
-        ${escapeHtml(c.curso)} - ${escapeHtml(c.especialidad)} - ${c.promocion}
-      </option>
-    `).join('');
+    llenarSelectores();
 
-    $('cursoSel').innerHTML = html;
-    $('cursoNuevo').innerHTML = html;
-
-    if(cache.cursos.length > 0){
-      cache.cursoActual = cache.cursos[0];
-      $('cursoSel').value = cache.cursoActual.id;
-      await cargarCurso();
-    }
   }catch(err){
     toast('Error', err.message);
   }
 }
 
-async function cargarCurso(){
+function llenarSelectores(){
+  // Selector de filtros (proyectos)
+  const htmlPromos = cache.promociones.map(p => `
+    <option value="${p.id}">${p.anio}</option>
+  `).join('');
+  
+  const htmlEsps = cache.especialidades.map(e => `
+    <option value="${e.id}">${escapeHtml(e.nombre)}</option>
+  `).join('');
+
+  $('promocionSel').innerHTML = '<option value="">Seleccionar...</option>' + htmlPromos;
+  $('especialidadSel').innerHTML = '<option value="">Seleccionar...</option>' + htmlEsps;
+
+  // Selector de crear proyecto
+  $('promocionNuevo').innerHTML = '<option value="">Seleccionar...</option>' + htmlPromos;
+  $('especialidadNuevo').innerHTML = '<option value="">Seleccionar...</option>' + htmlEsps;
+}
+
+async function cargarProyectos(){
   try{
-    const cursoId = $('cursoSel').value;
-    cache.cursoActual = cache.cursos.find(x => String(x.id) === String(cursoId));
+    const promocionId = $('promocionSel').value;
+    const especialidadId = $('especialidadSel').value;
 
-    if(!cache.cursoActual) return;
+    if (!promocionId || !especialidadId) {
+      $('filtrosInfo').innerHTML = '<span class="badge warn">Selecciona promoción y especialidad</span>';
+      $('tblProy').querySelector('tbody').innerHTML = '';
+      $('hint').textContent = 'Selecciona filtros para ver proyectos';
+      $('btnDescargar').disabled = true;
+      return;
+    }
 
-    $('cursoInfo').innerHTML = `
-      <div class="badge">${escapeHtml(cache.cursoActual.curso)}</div>
-      <div style="height:8px"></div>
-      <div class="badge info">${escapeHtml(cache.cursoActual.especialidad)}</div>
-      <div class="badge">${cache.cursoActual.promocion}</div>
+    cache.promocionActual = cache.promociones.find(p => String(p.id) === promocionId);
+    cache.especialidadActual = cache.especialidades.find(e => String(e.id) === especialidadId);
+
+    $('filtrosInfo').innerHTML = `
+      <div class="badge">${cache.promocionActual.anio}</div>
+      <div style="height:4px"></div>
+      <div class="badge info">${escapeHtml(cache.especialidadActual.nombre)}</div>
     `;
 
-    cache.proyectos = await apiFetch(`/tutores/curso/${cursoId}`);
-
-    $('kpiProy').textContent = cache.proyectos.length;
-    $('kpiFiles').textContent = cache.proyectos.filter(x => !!x.nombre_archivo).length;
+    // Cargar proyectos
+    cache.proyectos = await apiFetch(`/tutores/proyectos/${promocionId}/${especialidadId}`);
 
     renderTabla();
-    show('cursos');
+    show('proyectos');
+    $('btnDescargar').disabled = false;
+
   }catch(err){
     toast('Error', err.message);
   }
@@ -288,8 +327,8 @@ function renderTabla(){
   }).join('');
 
   $('hint').textContent = rows.length
-    ? `Mostrando ${rows.length} proyecto(s) del curso seleccionado.`
-    : 'No hay resultados con ese filtro.';
+    ? `Mostrando ${rows.length} proyecto(s).`
+    : 'No hay proyectos con esos filtros.';
 }
 
 function abrirModalUpload(proyectoId, nombreProyecto){
@@ -323,7 +362,8 @@ async function subirArchivo(){
 
     toast('Éxito ✅', 'Memoria técnica subida correctamente');
     cerrarModal();
-    await cargarCurso();
+    await cargarProyectos();
+
   }catch(err){
     toast('Error', err.message);
   }
@@ -342,7 +382,8 @@ async function guardarNota(proyectoId){
     });
 
     toast('Guardado ✅', 'Nota guardada/actualizada');
-    await cargarCurso();
+    await cargarProyectos();
+
   }catch(err){
     toast('Error', err.message);
   }
@@ -350,38 +391,39 @@ async function guardarNota(proyectoId){
 
 async function crearProyecto(){
   try{
-    const curso_id = $('cursoNuevo').value;
+    const promocion_id = $('promocionNuevo').value;
+    const especialidad_id = $('especialidadNuevo').value;
     const titulo = $('tituloNuevo').value.trim();
     const descripcion = $('descripcionNuevo').value.trim();
 
-    if(!curso_id || !titulo) {
+    if(!promocion_id || !especialidad_id || !titulo) {
       return toast('Error', 'Completa los campos requeridos');
     }
 
     await apiFetch('/proyectos', {
       method: 'POST',
-      body: { curso_id, titulo, descripcion }
+      body: { promocion_id, especialidad_id, titulo, descripcion }
     });
 
     toast('Éxito ✅', 'Proyecto creado correctamente');
     $('tituloNuevo').value = '';
     $('descripcionNuevo').value = '';
     
-    await loadCursos();
-    show('cursos');
+    await loadInicial();
+    show('proyectos');
+
   }catch(err){
     toast('Error', err.message);
   }
 }
 
 async function descargarMemoriasTecnicas(){
-  if(!cache.cursoActual) return;
+  if(!cache.promocionActual || !cache.especialidadActual) return;
   
-  const curso = cache.cursos.find(c => c.id === cache.cursoActual.id);
-  // Necesitarías obtener especialidad_id y promocion_id del curso
-  // Por ahora, puedes hacer otra consulta o incluirlos en la respuesta
-  
-  window.open(`/api/descargas/pdfs/${curso.especialidad_id}/${curso.promocion_id}`, '_blank');
+  window.open(
+    `/api/descargas/pdfs/${cache.especialidadActual.id}/${cache.promocionActual.id}`, 
+    '_blank'
+  );
 }
 
 function escapeHtml(str){
@@ -393,7 +435,7 @@ function escapeHtml(str){
     .replaceAll("'","&#039;");
 }
 
-loadCursos();
+loadInicial();
 </script>
 </body>
 </html>

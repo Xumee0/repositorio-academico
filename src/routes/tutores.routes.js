@@ -3,82 +3,70 @@ const db = require('../config/database');
 const { verifyToken } = require('../middlewares/auth');
 
 // =====================================================
-// OBTENER CURSOS DEL TUTOR
+// OBTENER TODAS LAS PROMOCIONES
 // =====================================================
-router.get('/cursos', verifyToken, async (req, res) => {
+router.get('/promociones', verifyToken, async (req, res) => {
   try {
-    const { id, rol } = req.user;
+    const { rol } = req.user;
     
-    // Solo tutores y admins pueden acceder
     if (rol !== 'tutor' && rol !== 'admin') {
       return res.status(403).json({ msg: 'Acceso denegado' });
     }
 
-    let query, params;
+    const [rows] = await db.query(`
+      SELECT 
+        id,
+        anio,
+        descripcion
+      FROM promociones
+      ORDER BY anio DESC
+    `);
 
-    if (rol === 'admin') {
-      // Admin ve todos los cursos
-      query = `
-        SELECT 
-          c.id,
-          CONCAT(c.nombre, ' ', c.paralelo) AS curso,
-          e.id AS especialidad_id,
-          e.nombre AS especialidad,
-          p.id AS promocion_id,
-          p.anio AS promocion
-        FROM cursos c
-        JOIN especialidades e ON e.id = c.especialidad_id
-        JOIN promociones p ON p.id = c.promocion_id
-        ORDER BY p.anio DESC, e.nombre, c.nombre
-      `;
-      params = [];
-    } else {
-      // Tutor solo ve sus cursos asignados
-      query = `
-        SELECT 
-          c.id,
-          CONCAT(c.nombre, ' ', c.paralelo) AS curso,
-          e.id AS especialidad_id,
-          e.nombre AS especialidad,
-          p.id AS promocion_id,
-          p.anio AS promocion
-        FROM tutor_curso tc
-        JOIN cursos c ON c.id = tc.curso_id
-        JOIN especialidades e ON e.id = c.especialidad_id
-        JOIN promociones p ON p.id = c.promocion_id
-        WHERE tc.tutor_id = ?
-        ORDER BY p.anio DESC, e.nombre, c.nombre
-      `;
-      params = [id];
-    }
-
-    const [rows] = await db.query(query, params);
     res.json(rows);
 
   } catch (err) {
-    console.error('Error al obtener cursos:', err);
-    res.status(500).json({ msg: 'Error al obtener cursos' });
+    console.error('Error al obtener promociones:', err);
+    res.status(500).json({ msg: 'Error al obtener promociones' });
   }
 });
 
 // =====================================================
-// OBTENER PROYECTOS DE UN CURSO ESPECÍFICO
+// OBTENER ESPECIALIDADES
 // =====================================================
-router.get('/curso/:curso_id', verifyToken, async (req, res) => {
+router.get('/especialidades', verifyToken, async (req, res) => {
+  try {
+    const { rol } = req.user;
+    
+    if (rol !== 'tutor' && rol !== 'admin') {
+      return res.status(403).json({ msg: 'Acceso denegado' });
+    }
+
+    const [rows] = await db.query(`
+      SELECT 
+        id,
+        nombre
+      FROM especialidades
+      ORDER BY nombre
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error('Error al obtener especialidades:', err);
+    res.status(500).json({ msg: 'Error al obtener especialidades' });
+  }
+});
+
+// =====================================================
+// OBTENER PROYECTOS POR PROMOCIÓN Y ESPECIALIDAD
+// =====================================================
+router.get('/proyectos/:promocion_id/:especialidad_id', verifyToken, async (req, res) => {
   try {
     const { id, rol } = req.user;
-    const { curso_id } = req.params;
+    const { promocion_id, especialidad_id } = req.params;
 
-    // Verificar que el tutor tiene acceso a este curso
-    if (rol === 'tutor') {
-      const [[acceso]] = await db.query(
-        'SELECT 1 FROM tutor_curso WHERE tutor_id=? AND curso_id=?',
-        [id, curso_id]
-      );
-      
-      if (!acceso) {
-        return res.status(403).json({ msg: 'No tienes acceso a este curso' });
-      }
+    if (rol !== 'tutor' && rol !== 'admin') {
+      return res.status(403).json({ msg: 'Acceso denegado' });
     }
 
     // Obtener proyectos con archivos y notas
@@ -97,53 +85,58 @@ router.get('/curso/:curso_id', verifyToken, async (req, res) => {
         af.tamano_bytes,
         n.calificacion,
         n.observaciones,
-        u.nombre AS tutor_proyecto
+        u.nombre AS tutor_proyecto,
+        pr.anio AS promocion,
+        e.nombre AS especialidad
       FROM proyectos p
+      JOIN promociones pr ON pr.id = p.promocion_id
+      JOIN especialidades e ON e.id = p.especialidad_id
+      JOIN usuarios u ON u.id = p.tutor_id
       LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
       LEFT JOIN notas n ON n.proyecto_id = p.id AND n.tutor_id = ?
-      LEFT JOIN usuarios u ON u.id = p.tutor_id
-      WHERE p.curso_id = ? AND p.eliminado = 0
+      WHERE p.promocion_id = ? 
+        AND p.especialidad_id = ? 
+        AND p.eliminado = 0
       ORDER BY p.titulo
-    `, [id, curso_id]);
+    `, [id, promocion_id, especialidad_id]);
 
     res.json(rows);
 
   } catch (err) {
-    console.error('Error al obtener proyectos del curso:', err);
+    console.error('Error al obtener proyectos:', err);
     res.status(500).json({ msg: 'Error al obtener proyectos' });
   }
 });
 
 // =====================================================
-// OBTENER ESTADÍSTICAS DEL TUTOR
+// OBTENER ESTADÍSTICAS GENERALES
 // =====================================================
 router.get('/estadisticas', verifyToken, async (req, res) => {
   try {
-    const { id, rol } = req.user;
+    const { rol } = req.user;
 
     if (rol !== 'tutor' && rol !== 'admin') {
       return res.status(403).json({ msg: 'Acceso denegado' });
     }
 
-    let whereClause = rol === 'tutor' ? 'WHERE tc.tutor_id = ?' : '';
-    let params = rol === 'tutor' ? [id] : [];
-
     const [stats] = await db.query(`
       SELECT 
-        COUNT(DISTINCT c.id) AS total_cursos,
+        COUNT(DISTINCT pr.id) AS total_promociones,
+        COUNT(DISTINCT e.id) AS total_especialidades,
         COUNT(DISTINCT p.id) AS total_proyectos,
         COUNT(DISTINCT af.id) AS proyectos_con_archivo,
         COUNT(DISTINCT n.id) AS proyectos_calificados
-      FROM tutor_curso tc
-      JOIN cursos c ON c.id = tc.curso_id
-      LEFT JOIN proyectos p ON p.curso_id = c.id AND p.eliminado = 0
+      FROM proyectos p
+      JOIN promociones pr ON pr.id = p.promocion_id
+      JOIN especialidades e ON e.id = p.especialidad_id
       LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
       LEFT JOIN notas n ON n.proyecto_id = p.id
-      ${whereClause}
-    `, params);
+      WHERE p.eliminado = 0
+    `);
 
     res.json(stats[0] || {
-      total_cursos: 0,
+      total_promociones: 0,
+      total_especialidades: 0,
       total_proyectos: 0,
       proyectos_con_archivo: 0,
       proyectos_calificados: 0
@@ -156,63 +149,81 @@ router.get('/estadisticas', verifyToken, async (req, res) => {
 });
 
 // =====================================================
-// OBTENER INFORMACIÓN DETALLADA DE UN CURSO
+// OBTENER RESUMEN POR PROMOCIÓN Y ESPECIALIDAD
 // =====================================================
-router.get('/curso/:curso_id/info', verifyToken, async (req, res) => {
+router.get('/resumen/:promocion_id/:especialidad_id', verifyToken, async (req, res) => {
   try {
-    const { id, rol } = req.user;
-    const { curso_id } = req.params;
+    const { rol } = req.user;
+    const { promocion_id, especialidad_id } = req.params;
 
-    // Verificar acceso
-    if (rol === 'tutor') {
-      const [[acceso]] = await db.query(
-        'SELECT 1 FROM tutor_curso WHERE tutor_id=? AND curso_id=?',
-        [id, curso_id]
-      );
-      if (!acceso) {
-        return res.status(403).json({ msg: 'No tienes acceso a este curso' });
-      }
+    if (rol !== 'tutor' && rol !== 'admin') {
+      return res.status(403).json({ msg: 'Acceso denegado' });
     }
 
-    // Información del curso
-    const [[curso]] = await db.query(`
+    const [[resumen]] = await db.query(`
       SELECT 
-        c.id,
-        c.nombre,
-        c.paralelo,
+        pr.anio AS promocion,
+        pr.descripcion AS promocion_descripcion,
         e.nombre AS especialidad,
-        p.anio AS promocion,
-        COUNT(DISTINCT pr.id) AS total_proyectos,
-        COUNT(DISTINCT af.id) AS proyectos_con_archivo
-      FROM cursos c
-      JOIN especialidades e ON e.id = c.especialidad_id
-      JOIN promociones p ON p.id = c.promocion_id
-      LEFT JOIN proyectos pr ON pr.curso_id = c.id AND pr.eliminado = 0
-      LEFT JOIN archivo_final af ON af.proyecto_id = pr.id AND af.eliminado = 0
-      WHERE c.id = ?
-      GROUP BY c.id
-    `, [curso_id]);
+        COUNT(DISTINCT p.id) AS total_proyectos,
+        COUNT(DISTINCT af.id) AS proyectos_con_memoria,
+        COUNT(DISTINCT n.id) AS proyectos_calificados,
+        COALESCE(AVG(n.calificacion), 0) AS promedio_calificaciones
+      FROM promociones pr
+      JOIN especialidades e ON e.id = ?
+      LEFT JOIN proyectos p ON p.promocion_id = pr.id 
+        AND p.especialidad_id = e.id 
+        AND p.eliminado = 0
+      LEFT JOIN archivo_final af ON af.proyecto_id = p.id AND af.eliminado = 0
+      LEFT JOIN notas n ON n.proyecto_id = p.id
+      WHERE pr.id = ?
+      GROUP BY pr.id, e.id
+    `, [especialidad_id, promocion_id]);
 
-    if (!curso) {
-      return res.status(404).json({ msg: 'Curso no encontrado' });
+    if (!resumen) {
+      return res.status(404).json({ msg: 'No se encontró información' });
     }
 
-    // Tutores del curso
-    const [tutores] = await db.query(`
-      SELECT u.id, u.nombre, u.correo
-      FROM tutor_curso tc
-      JOIN usuarios u ON u.id = tc.tutor_id
-      WHERE tc.curso_id = ?
-    `, [curso_id]);
-
-    res.json({
-      ...curso,
-      tutores
-    });
+    res.json(resumen);
 
   } catch (err) {
-    console.error('Error al obtener información del curso:', err);
-    res.status(500).json({ msg: 'Error al obtener información' });
+    console.error('Error al obtener resumen:', err);
+    res.status(500).json({ msg: 'Error al obtener resumen' });
+  }
+});
+
+// =====================================================
+// OBTENER COMBINACIONES PROMOCIÓN-ESPECIALIDAD CON PROYECTOS
+// =====================================================
+router.get('/combinaciones', verifyToken, async (req, res) => {
+  try {
+    const { rol } = req.user;
+
+    if (rol !== 'tutor' && rol !== 'admin') {
+      return res.status(403).json({ msg: 'Acceso denegado' });
+    }
+
+    const [rows] = await db.query(`
+      SELECT DISTINCT
+        pr.id AS promocion_id,
+        pr.anio AS promocion,
+        e.id AS especialidad_id,
+        e.nombre AS especialidad,
+        COUNT(p.id) AS total_proyectos
+      FROM promociones pr
+      CROSS JOIN especialidades e
+      LEFT JOIN proyectos p ON p.promocion_id = pr.id 
+        AND p.especialidad_id = e.id 
+        AND p.eliminado = 0
+      GROUP BY pr.id, e.id
+      ORDER BY pr.anio DESC, e.nombre
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error('Error al obtener combinaciones:', err);
+    res.status(500).json({ msg: 'Error al obtener combinaciones' });
   }
 });
 

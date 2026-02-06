@@ -74,12 +74,21 @@
     <section id="proyectos" style="display:none;">
       <div class="card">
         <h3>Todos los Proyectos</h3>
+        
+        <div style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap;">
+          <select class="input" id="filtroPromocion" onchange="applyFilter()" style="width:auto;">
+            <option value="">Todas las promociones</option>
+          </select>
+          <select class="input" id="filtroEspecialidad" onchange="applyFilter()" style="width:auto;">
+            <option value="">Todas las especialidades</option>
+          </select>
+        </div>
+
         <table class="table" id="tblProy">
           <thead>
             <tr>
               <th>Promoción</th>
               <th>Especialidad</th>
-              <th>Curso</th>
               <th>Tema/Proyecto</th>
               <th>Tutor</th>
               <th>Estado</th>
@@ -111,6 +120,16 @@
 
         <button class="btn success" onclick="descargarMemoriasPorFiltro()">
           📥 Descargar ZIP
+        </button>
+      </div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3>Descarga General</h3>
+        <p style="color:var(--muted); font-size:13px;">
+          Descarga un Excel con información completa de todos los proyectos del sistema.
+        </p>
+        <button class="btn success" onclick="descargarExcelGeneral()">
+          📊 Descargar Excel General
         </button>
       </div>
     </section>
@@ -146,15 +165,20 @@ function show(section){
 
 function applyFilter(){
   const q = $('q').value.trim().toLowerCase();
-  const p = cache.proyectos.filter(x =>
-    `${x.tema_proyecto} ${x.tutor} ${x.especialidad} ${x.promocion} ${x.curso} ${x.estado}`.toLowerCase().includes(q)
-  );
+  const promoFiltro = $('filtroPromocion')?.value || '';
+  const espFiltro = $('filtroEspecialidad')?.value || '';
+  
+  const p = cache.proyectos.filter(x => {
+    const matchText = `${x.tema_proyecto} ${x.tutor} ${x.especialidad} ${x.promocion} ${x.estado}`.toLowerCase().includes(q);
+    const matchPromo = !promoFiltro || String(x.promocion) === promoFiltro;
+    const matchEsp = !espFiltro || x.especialidad === espFiltro;
+    return matchText && matchPromo && matchEsp;
+  });
   
   $('tblProy').querySelector('tbody').innerHTML = p.map(x=>`
     <tr>
       <td>${x.promocion}</td>
       <td>${x.especialidad}</td>
-      <td>${escapeHtml(x.curso)}</td>
       <td><strong>${escapeHtml(x.tema_proyecto)}</strong></td>
       <td>${escapeHtml(x.tutor)}</td>
       <td>${statusBadge(x.estado)}</td>
@@ -169,15 +193,22 @@ function applyFilter(){
 async function loadAll(){
   try{
     cache.proyectos = await apiFetch('/proyectos');
-    cache.especialidades = await apiFetch('/cursos/especialidades');
-    cache.promociones = await apiFetch('/cursos/promociones');
+    cache.especialidades = await apiFetch('/tutores/especialidades');
+    cache.promociones = await apiFetch('/tutores/promociones');
 
     $('kpiProy').textContent = cache.proyectos.length;
     $('kpiMem').textContent = cache.proyectos.filter(x => x.nombre_archivo).length;
     $('kpiEsp').textContent = cache.especialidades.length;
     $('kpiPromo').textContent = cache.promociones.length;
 
-    // Llenar selectores
+    // Llenar filtros
+    $('filtroPromocion').innerHTML = '<option value="">Todas las promociones</option>' +
+      cache.promociones.map(p => `<option value="${p.anio}">${p.anio}</option>`).join('');
+    
+    $('filtroEspecialidad').innerHTML = '<option value="">Todas las especialidades</option>' +
+      cache.especialidades.map(e => `<option value="${escapeHtml(e.nombre)}">${escapeHtml(e.nombre)}</option>`).join('');
+
+    // Llenar selectores de descarga
     $('selEsp').innerHTML = cache.especialidades.map(e => 
       `<option value="${e.id}">${escapeHtml(e.nombre)}</option>`
     ).join('');

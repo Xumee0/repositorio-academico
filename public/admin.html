@@ -446,7 +446,6 @@
 <script>
 requireAuth('admin');
 
-const API_PROMOCIONES = '/api/promociones';
 let cache = { proyectos:[], especialidades:[], promociones:[] };
 
 // ============================================
@@ -549,16 +548,8 @@ async function cargarPromociones() {
     $('promocionesContainer').style.display = 'none';
     $('emptyState').style.display = 'none';
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(API_PROMOCIONES, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      throw new Error('Error al cargar promociones');
-    }
-
-    const promociones = await response.json();
+    // Usar apiFetch en lugar de fetch directo
+    const promociones = await apiFetch('/promociones');
     cache.promociones = promociones;
     
     // Actualizar KPI
@@ -568,7 +559,7 @@ async function cargarPromociones() {
 
   } catch (error) {
     console.error('Error:', error);
-    mostrarAlerta('Error al cargar las promociones', 'danger');
+    mostrarAlerta('Error al cargar las promociones: ' + error.message, 'danger');
     $('loadingPromocion').style.display = 'none';
     $('emptyState').style.display = 'block';
   }
@@ -618,16 +609,8 @@ function mostrarModalCrear() {
 
 async function editarPromocion(id) {
   try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_PROMOCIONES}/${id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      throw new Error('Error al cargar promoción');
-    }
-
-    const promocion = await response.json();
+    // Usar apiFetch
+    const promocion = await apiFetch(`/promociones/${id}`);
     
     $('modalTitulo').textContent = '✏️ Editar Promoción';
     $('promocionId').value = promocion.id;
@@ -638,7 +621,7 @@ async function editarPromocion(id) {
 
   } catch (error) {
     console.error('Error:', error);
-    mostrarAlerta('Error al cargar la promoción', 'danger');
+    mostrarAlerta('Error al cargar la promoción: ' + error.message, 'danger');
   }
 }
 
@@ -661,24 +644,14 @@ async function guardarPromocion(event) {
   }
 
   try {
-    const token = localStorage.getItem('token');
-    const url = id ? `${API_PROMOCIONES}/${id}` : API_PROMOCIONES;
+    // Usar apiFetch
+    const path = id ? `/promociones/${id}` : '/promociones';
     const method = id ? 'PUT' : 'POST';
 
-    const response = await fetch(url, {
+    const data = await apiFetch(path, {
       method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ anio: anioNum, descripcion })
+      body: { anio: anioNum, descripcion }
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.msg || 'Error al guardar promoción');
-    }
 
     mostrarAlerta(data.msg, 'success');
     cerrarModal('modalPromocion');
@@ -701,17 +674,10 @@ async function confirmarEliminar() {
   const id = $('idEliminar').value;
 
   try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_PROMOCIONES}/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
+    // Usar apiFetch
+    const data = await apiFetch(`/promociones/${id}`, {
+      method: 'DELETE'
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.msg || 'Error al eliminar promoción');
-    }
 
     mostrarAlerta(data.msg, 'success');
     cerrarModal('modalEliminar');

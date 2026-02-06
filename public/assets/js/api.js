@@ -20,7 +20,7 @@ async function apiFetch(
   const h = { ...headers };
 
   const token = getToken();
-  if (token) h['Authorization'] = token;
+  if (token) h['Authorization'] = `Bearer ${token}`;
 
   if (!isForm && body && typeof body !== 'string') {
     h['Content-Type'] = 'application/json';

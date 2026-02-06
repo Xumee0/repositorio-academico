@@ -38,6 +38,14 @@
     <!-- DASHBOARD -->
     <section id="home">
       <div class="grid">
+
+        <!-- ✅ NUEVO KPI: Promociones (evita el error kpiPromos null) -->
+        <div class="card col-4">
+          <h3>Promociones</h3>
+          <div class="kpi" id="kpiPromos">—</div>
+          <div class="hint">Disponibles</div>
+        </div>
+
         <div class="card col-4">
           <h3>Proyectos</h3>
           <div class="kpi" id="kpiProy">—</div>
@@ -103,6 +111,8 @@
                   <th>Estado</th>
                   <th>Memoria Técnica</th>
                   <th style="min-width:240px;">Calificar</th>
+                  <!-- ✅ NUEVA COLUMNA -->
+                  <th style="min-width:170px;">Acciones</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -137,7 +147,7 @@
         <input class="input" id="tituloNuevo" placeholder="Ej: Sistema de Gestión Académica">
 
         <label>Descripción (opcional)</label>
-        <textarea class="input" id="descripcionNuevo" rows="3" 
+        <textarea class="input" id="descripcionNuevo" rows="3"
                   placeholder="Breve descripción del proyecto..."></textarea>
 
         <label>Memoria Técnica (PDF) - Opcional</label>
@@ -164,7 +174,7 @@
 </div>
 
 <!-- Modal para subir archivo -->
-<div id="modalUpload" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; 
+<div id="modalUpload" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
      background:rgba(0,0,0,0.7); z-index:1000; padding:40px;">
   <div class="card" style="max-width:500px; margin:auto;">
     <h3>Subir Memoria Técnica (PDF)</h3>
@@ -175,6 +185,50 @@
     <div style="height:10px"></div>
     <button class="btn success" onclick="subirArchivo()">Subir</button>
     <button class="btn" onclick="cerrarModal()">Cancelar</button>
+  </div>
+</div>
+
+<!-- ✅ NUEVO: Modal para editar proyecto -->
+<div id="modalEditar" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+     background:rgba(0,0,0,0.7); z-index:1001; padding:40px;">
+  <div class="card" style="max-width:560px; margin:auto;">
+    <h3>Editar Proyecto</h3>
+    <p style="color:var(--muted); font-size:13px;">
+      Estás editando: <strong id="editProyectoNombre"></strong>
+    </p>
+
+    <input type="hidden" id="editProyectoId">
+
+    <label>Título</label>
+    <input class="input" id="editTitulo">
+
+    <label>Descripción</label>
+    <textarea class="input" id="editDescripcion" rows="3"></textarea>
+
+    <label>Estado</label>
+    <select class="input" id="editEstado">
+      <option value="pendiente">Pendiente</option>
+      <option value="aprobado">Aprobado</option>
+      <option value="rechazado">Rechazado</option>
+    </select>
+
+    <div style="height:10px"></div>
+
+    <label>Reemplazar / Subir PDF</label>
+    <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">
+      Si eliges un PDF aquí, se subirá y reemplazará el actual.
+    </div>
+    <input type="file" class="input" id="editArchivo" accept=".pdf">
+    <div id="editArchivoInfo" style="color:var(--muted); font-size:12px; margin-top:6px;"></div>
+
+    <div style="height:12px"></div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn success" onclick="guardarEdicionProyecto()">Guardar cambios</button>
+      <button class="btn danger" onclick="eliminarArchivoProyecto()">Eliminar PDF</button>
+      <button class="btn danger" onclick="eliminarProyectoDesdeModal()">Eliminar Proyecto</button>
+      <button class="btn" onclick="cerrarModalEditar()">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -208,10 +262,10 @@ async function loadInicial(){
   try{
     // Cargar promociones
     cache.promociones = await apiFetch('/tutores/promociones');
-    
+
     // Cargar especialidades
     cache.especialidades = await apiFetch('/tutores/especialidades');
-    
+
     // Cargar estadísticas
     const stats = await apiFetch('/tutores/estadisticas');
 
@@ -219,9 +273,9 @@ async function loadInicial(){
     const elProy   = $('kpiProy');
     const elFiles  = $('kpiFiles');
 
-if (elPromos) elPromos.textContent = stats.total_promociones;
-if (elProy)   elProy.textContent   = stats.total_proyectos;
-if (elFiles)  elFiles.textContent  = stats.proyectos_con_archivo;
+    if (elPromos) elPromos.textContent = stats.total_promociones;
+    if (elProy)   elProy.textContent   = stats.total_proyectos;
+    if (elFiles)  elFiles.textContent  = stats.proyectos_con_archivo;
 
     // Llenar selectores
     llenarSelectores();
@@ -236,7 +290,7 @@ function llenarSelectores(){
   const htmlPromos = cache.promociones.map(p => `
     <option value="${p.id}">${p.anio}</option>
   `).join('');
-  
+
   const htmlEsps = cache.especialidades.map(e => `
     <option value="${e.id}">${escapeHtml(e.nombre)}</option>
   `).join('');
@@ -331,6 +385,14 @@ function renderTabla(){
             </button>
           </div>
         </td>
+
+        <!-- ✅ NUEVO: Acciones -->
+        <td>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn warning" onclick="abrirModalEditar(${x.proyecto_id})">Editar</button>
+            <button class="btn danger" onclick="eliminarProyecto(${x.proyecto_id})">Eliminar</button>
+          </div>
+        </td>
       </tr>
     `;
   }).join('');
@@ -371,6 +433,110 @@ async function subirArchivo(){
 
     toast('Éxito ✅', 'Memoria técnica subida correctamente');
     cerrarModal();
+    await cargarProyectos();
+
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+/* ✅ NUEVO: Editar / Eliminar proyecto y archivo */
+function abrirModalEditar(proyectoId){
+  const p = cache.proyectos.find(x => String(x.proyecto_id) === String(proyectoId));
+  if(!p) return toast('Error', 'No se encontró el proyecto');
+
+  $('editProyectoId').value = p.proyecto_id;
+  $('editProyectoNombre').textContent = p.tema_proyecto || '';
+  $('editTitulo').value = p.tema_proyecto || '';
+  $('editDescripcion').value = p.descripcion || '';
+  $('editEstado').value = (p.estado || 'pendiente');
+
+  $('editArchivo').value = '';
+  $('editArchivoInfo').innerHTML = p.nombre_archivo
+    ? `<span class="badge">PDF actual: ${escapeHtml(p.nombre_visible || 'Memoria Técnica')}</span>`
+    : `<span class="badge warn">Sin PDF actualmente</span>`;
+
+  $('modalEditar').style.display = 'block';
+}
+
+function cerrarModalEditar(){
+  $('modalEditar').style.display = 'none';
+}
+
+async function guardarEdicionProyecto(){
+  try{
+    const id = $('editProyectoId').value;
+    const titulo = $('editTitulo').value.trim();
+    const descripcion = $('editDescripcion').value.trim();
+    const estado = $('editEstado').value;
+
+    if(!titulo) return toast('Error', 'El título no puede estar vacío');
+
+    // 1) Actualizar datos
+    await apiFetch(`/proyectos/${id}`, {
+      method: 'PUT',
+      body: { titulo, descripcion, estado }
+    });
+
+    // 2) Si seleccionó archivo, subir/reemplazar
+    const archivo = $('editArchivo').files[0];
+    if(archivo){
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+      formData.append('proyecto_id', id);
+
+      const resp = await fetch(`${API_BASE}/archivo-final`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: formData
+      });
+
+      if(!resp.ok) {
+        toast('Advertencia ⚠️', 'Se guardó el proyecto pero falló el PDF. Intenta de nuevo.');
+      }
+    }
+
+    toast('Éxito ✅', 'Proyecto actualizado');
+    cerrarModalEditar();
+    await cargarProyectos();
+
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function eliminarArchivoProyecto(){
+  try{
+    const id = $('editProyectoId').value;
+    if(!confirm('¿Eliminar el PDF de este proyecto?')) return;
+
+    await apiFetch(`/archivo-final/${id}`, { method: 'DELETE' });
+
+    toast('Éxito ✅', 'PDF eliminado');
+    // refrescar cache
+    await cargarProyectos();
+
+    // reabrir modal con info actualizada
+    abrirModalEditar(id);
+
+  }catch(err){
+    toast('Error', err.message);
+  }
+}
+
+async function eliminarProyectoDesdeModal(){
+  const id = $('editProyectoId').value;
+  await eliminarProyecto(id, true);
+}
+
+async function eliminarProyecto(proyectoId, desdeModal=false){
+  try{
+    if(!confirm('¿Eliminar este proyecto? (Esto lo quitará del sistema)')) return;
+
+    await apiFetch(`/proyectos/${proyectoId}`, { method: 'DELETE' });
+
+    toast('Éxito ✅', 'Proyecto eliminado');
+    if(desdeModal) cerrarModalEditar();
     await cargarProyectos();
 
   }catch(err){
@@ -424,7 +590,7 @@ async function crearProyecto(){
     // 2. Si hay archivo, subirlo
     if(archivo) {
       btn.textContent = 'Subiendo archivo...';
-      
+
       const formData = new FormData();
       formData.append('archivo', archivo);
       formData.append('proyecto_id', proyecto.id);
@@ -470,7 +636,7 @@ function limpiarFormulario(){
 function mostrarInfoArchivo(){
   const archivo = $('archivoNuevo').files[0];
   const info = $('archivoInfo');
-  
+
   if(archivo) {
     const sizeMB = (archivo.size / 1024 / 1024).toFixed(2);
     info.innerHTML = `
@@ -488,38 +654,38 @@ async function descargarMemoriasTecnicas(){
     if(!cache.promocionActual || !cache.especialidadActual) {
       return toast('Error', 'Selecciona promoción y especialidad primero');
     }
-    
+
     const btn = $('btnDescargar');
     btn.disabled = true;
     btn.textContent = '⏳ Descargando...';
-    
+
     const token = getToken();
     const url = `/api/descargas/pdfs/${cache.especialidadActual.id}/${cache.promocionActual.id}`;
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.msg || 'Error al descargar');
     }
-    
+
     // Obtener el blob (archivo ZIP)
     const blob = await response.blob();
-    
+
     // Obtener nombre del archivo del header Content-Disposition
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename = 'Memorias_Tecnicas.zip';
-    
+
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="(.+)"/);
       if (match) filename = match[1];
     }
-    
+
     // Crear enlace de descarga
     const urlBlob = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -527,13 +693,13 @@ async function descargarMemoriasTecnicas(){
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    
+
     // Limpiar
     window.URL.revokeObjectURL(urlBlob);
     document.body.removeChild(a);
-    
+
     toast('Éxito ✅', 'Memorias técnicas descargadas correctamente');
-    
+
   } catch (err) {
     console.error('Error al descargar:', err);
     toast('Error', err.message || 'No se pudo descargar el archivo');

@@ -5,6 +5,171 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Panel Admin | Repositorio Académico</title>
   <link rel="stylesheet" href="assets/css/app.css">
+  <style>
+    /* Estilos adicionales para el módulo de promociones */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal.show {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: var(--card-bg, white);
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    
+    .modal-header {
+      padding: 20px 25px;
+      border-bottom: 1px solid var(--border, #e5e7eb);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--text, #1f2937);
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--muted, #6b7280);
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-close:hover {
+      color: var(--text, #1f2937);
+    }
+    
+    .modal-body {
+      padding: 25px;
+    }
+    
+    .modal-footer {
+      padding: 20px 25px;
+      border-top: 1px solid var(--border, #e5e7eb);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--text, #1f2937);
+    }
+    
+    .form-group .hint {
+      font-size: 0.85rem;
+      color: var(--muted, #6b7280);
+      margin-top: 5px;
+    }
+    
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .alert-info {
+      background: #dbeafe;
+      color: #1e40af;
+      border-left: 4px solid #3b82f6;
+    }
+    
+    .alert-warning {
+      background: #fef3c7;
+      color: #92400e;
+      border-left: 4px solid #f59e0b;
+    }
+    
+    .alert-danger {
+      background: #fee2e2;
+      color: #991b1b;
+      border-left: 4px solid #ef4444;
+    }
+    
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border-left: 4px solid #10b981;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted, #6b7280);
+    }
+    
+    .empty-state .icon {
+      font-size: 4rem;
+      opacity: 0.3;
+      margin-bottom: 20px;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    
+    .modal-danger .modal-header {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .modal-danger .modal-close {
+      color: white;
+    }
+    
+    .badge-count {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    
+    textarea.input {
+      min-height: 80px;
+      resize: vertical;
+      font-family: inherit;
+    }
+  </style>
 </head>
 <body>
 <div class="container">
@@ -18,10 +183,11 @@
     </div>
 
     <div class="nav">
-      <button id="navHome" class="active" onclick="show('home')">Dashboard</button>
-      <button id="navProyectos" onclick="show('proyectos')">Proyectos</button>
-      <button id="navDescargas" onclick="show('descargas')">Descargas</button>
-      <button class="danger btn" style="margin-top:8px;" onclick="logout()">Cerrar sesión</button>
+      <button id="navHome" class="active" onclick="show('home')">📊 Dashboard</button>
+      <button id="navProyectos" onclick="show('proyectos')">📚 Proyectos</button>
+      <button id="navPromociones" onclick="show('promociones')">🎓 Promociones</button>
+      <button id="navDescargas" onclick="show('descargas')">📥 Descargas</button>
+      <button class="danger btn" style="margin-top:8px;" onclick="logout()">🚪 Cerrar sesión</button>
     </div>
   </aside>
 
@@ -38,6 +204,7 @@
       <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
     </div>
 
+    <!-- SECCIÓN: DASHBOARD -->
     <section id="home">
       <div class="grid">
         <div class="card col-3">
@@ -64,13 +231,14 @@
         <div class="card col-12">
           <h3>Resumen</h3>
           <div style="color:var(--muted); font-size:13px;">
-            Desde este panel puedes ver todos los proyectos, descargar memorias técnicas por especialidad/promoción, 
+            Desde este panel puedes ver todos los proyectos, gestionar promociones, descargar memorias técnicas por especialidad/promoción, 
             y generar reportes Excel generales.
           </div>
         </div>
       </div>
     </section>
 
+    <!-- SECCIÓN: PROYECTOS -->
     <section id="proyectos" style="display:none;">
       <div class="card">
         <h3>Todos los Proyectos</h3>
@@ -100,6 +268,57 @@
       </div>
     </section>
 
+    <!-- SECCIÓN: PROMOCIONES -->
+    <section id="promociones" style="display:none;">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h3 style="margin: 0;">🎓 Gestión de Promociones</h3>
+            <p style="color: var(--muted); font-size: 0.9rem; margin-top: 5px;">
+              Administra las promociones del repositorio académico
+            </p>
+          </div>
+          <button class="btn primary" onclick="mostrarModalCrear()">
+            ➕ Nueva Promoción
+          </button>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div id="loadingPromocion" style="text-align: center; padding: 40px;">
+          <div class="spinner"></div>
+          <p style="margin-top: 15px; color: var(--muted);">Cargando promociones...</p>
+        </div>
+
+        <div id="promocionesContainer" style="display: none;">
+          <table class="table" id="tablaPromociones">
+            <thead>
+              <tr>
+                <th>Año</th>
+                <th>Descripción</th>
+                <th style="text-align: center;">Proyectos</th>
+                <th>Fecha Creación</th>
+                <th style="text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" style="display: none;">
+          <div class="empty-state">
+            <div class="icon">📁</div>
+            <h3>No hay promociones registradas</h3>
+            <p>Comienza creando tu primera promoción</p>
+            <button class="btn primary" onclick="mostrarModalCrear()" style="margin-top: 20px;">
+              ➕ Crear Primera Promoción
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: DESCARGAS -->
     <section id="descargas" style="display:none;">
       <div class="card">
         <h3>Descargar Memorias Técnicas</h3>
@@ -137,9 +356,91 @@
   </main>
 </div>
 
+<!-- TOAST DE NOTIFICACIONES -->
 <div class="toast" id="toastBox">
   <strong id="toastTitle">Aviso</strong>
   <p id="toastMsg"></p>
+</div>
+
+<!-- MODAL: CREAR/EDITAR PROMOCIÓN -->
+<div class="modal" id="modalPromocion">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalTitulo">➕ Nueva Promoción</h3>
+      <button class="modal-close" onclick="cerrarModal('modalPromocion')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="formPromocion" onsubmit="guardarPromocion(event)">
+        <input type="hidden" id="promocionId">
+        
+        <div class="form-group">
+          <label for="anio">📅 Año *</label>
+          <input 
+            type="number" 
+            class="input" 
+            id="anio" 
+            placeholder="Ej: 2024" 
+            min="2000" 
+            max="2100"
+            required
+          >
+          <div class="hint">Año de graduación de la promoción</div>
+        </div>
+
+        <div class="form-group">
+          <label for="descripcion">📝 Descripción (Opcional)</label>
+          <textarea 
+            class="input" 
+            id="descripcion" 
+            rows="3" 
+            placeholder="Ej: Promoción del Bicentenario"
+          ></textarea>
+          <div class="hint">Información adicional sobre la promoción</div>
+        </div>
+
+        <div class="alert alert-info">
+          <span>ℹ️</span>
+          <small>Los campos marcados con * son obligatorios</small>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="cerrarModal('modalPromocion')">
+        ❌ Cancelar
+      </button>
+      <button type="button" class="btn primary" onclick="guardarPromocion()">
+        💾 Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR ELIMINACIÓN -->
+<div class="modal modal-danger" id="modalEliminar">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>⚠️ Confirmar Eliminación</h3>
+      <button class="modal-close" onclick="cerrarModal('modalEliminar')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="idEliminar">
+      <p style="margin-bottom: 15px;">
+        ¿Estás seguro de que deseas eliminar la promoción <strong id="promocionEliminar"></strong>?
+      </p>
+      <div class="alert alert-warning">
+        <span>⚠️</span>
+        <small>Solo se pueden eliminar promociones sin proyectos asociados.</small>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="cerrarModal('modalEliminar')">
+        Cancelar
+      </button>
+      <button type="button" class="btn danger" onclick="confirmarEliminar()">
+        🗑️ Eliminar
+      </button>
+    </div>
+  </div>
 </div>
 
 <script src="assets/js/api.js"></script>
@@ -149,20 +450,37 @@
 <script>
 requireAuth('admin');
 
+const API_PROMOCIONES = '/api/tutores/promociones';
 let cache = { proyectos:[], especialidades:[], promociones:[] };
 
+// ============================================
+// NAVEGACIÓN ENTRE SECCIONES
+// ============================================
 function setActive(btnId){
-  ['navHome','navProyectos','navDescargas'].forEach(id=>$(id).classList.remove('active'));
+  ['navHome','navProyectos','navPromociones','navDescargas'].forEach(id=>$(id).classList.remove('active'));
   $(btnId).classList.add('active');
 }
 
 function show(section){
-  ['home','proyectos','descargas'].forEach(s=>$(s).style.display='none');
+  ['home','proyectos','promociones','descargas'].forEach(s=>$(s).style.display='none');
   $(section).style.display='block';
-  setActive('nav' + section.charAt(0).toUpperCase() + section.slice(1).replace('home','Home'));
-  applyFilter();
+  
+  const navMap = {
+    'home': 'navHome',
+    'proyectos': 'navProyectos',
+    'promociones': 'navPromociones',
+    'descargas': 'navDescargas'
+  };
+  
+  setActive(navMap[section]);
+  
+  if(section === 'proyectos') applyFilter();
+  if(section === 'promociones') cargarPromociones();
 }
 
+// ============================================
+// FILTROS DE PROYECTOS
+// ============================================
 function applyFilter(){
   const q = $('q').value.trim().toLowerCase();
   const promoFiltro = $('filtroPromocion')?.value || '';
@@ -190,6 +508,9 @@ function applyFilter(){
   `).join('');
 }
 
+// ============================================
+// CARGAR DATOS INICIALES
+// ============================================
 async function loadAll(){
   try{
     cache.proyectos = await apiFetch('/proyectos');
@@ -201,7 +522,7 @@ async function loadAll(){
     $('kpiEsp').textContent = cache.especialidades.length;
     $('kpiPromo').textContent = cache.promociones.length;
 
-    // Llenar filtros
+    // Llenar filtros de proyectos
     $('filtroPromocion').innerHTML = '<option value="">Todas las promociones</option>' +
       cache.promociones.map(p => `<option value="${p.anio}">${p.anio}</option>`).join('');
     
@@ -223,6 +544,193 @@ async function loadAll(){
   }
 }
 
+// ============================================
+// GESTIÓN DE PROMOCIONES
+// ============================================
+async function cargarPromociones() {
+  try {
+    $('loadingPromocion').style.display = 'block';
+    $('promocionesContainer').style.display = 'none';
+    $('emptyState').style.display = 'none';
+
+    const token = localStorage.getItem('token');
+    const response = await fetch(API_PROMOCIONES, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al cargar promociones');
+    }
+
+    const promociones = await response.json();
+    cache.promociones = promociones;
+    
+    // Actualizar KPI
+    $('kpiPromo').textContent = promociones.length;
+    
+    mostrarPromociones(promociones);
+
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarAlerta('Error al cargar las promociones', 'danger');
+    $('loadingPromocion').style.display = 'none';
+    $('emptyState').style.display = 'block';
+  }
+}
+
+function mostrarPromociones(promociones) {
+  $('loadingPromocion').style.display = 'none';
+  
+  if (promociones.length === 0) {
+    $('emptyState').style.display = 'block';
+    $('promocionesContainer').style.display = 'none';
+    return;
+  }
+
+  $('emptyState').style.display = 'none';
+  $('promocionesContainer').style.display = 'block';
+
+  const tbody = $('tablaPromociones').querySelector('tbody');
+  tbody.innerHTML = promociones.map(p => `
+    <tr>
+      <td><strong>${p.anio}</strong></td>
+      <td>${escapeHtml(p.descripcion) || '<span style="color: var(--muted)">Sin descripción</span>'}</td>
+      <td style="text-align: center;">
+        <span class="badge-count">${p.total_proyectos || 0} proyecto${(p.total_proyectos || 0) !== 1 ? 's' : ''}</span>
+      </td>
+      <td>${formatearFecha(p.created_at)}</td>
+      <td>
+        <div class="btn-group">
+          <button class="btn small" onclick="editarPromocion(${p.id})" title="Editar">
+            ✏️ Editar
+          </button>
+          <button class="btn small danger" onclick="mostrarModalEliminar(${p.id}, '${p.anio}')" title="Eliminar">
+            🗑️ Eliminar
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function mostrarModalCrear() {
+  $('modalTitulo').textContent = '➕ Nueva Promoción';
+  $('formPromocion').reset();
+  $('promocionId').value = '';
+  abrirModal('modalPromocion');
+}
+
+async function editarPromocion(id) {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_PROMOCIONES}/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al cargar promoción');
+    }
+
+    const promocion = await response.json();
+    
+    $('modalTitulo').textContent = '✏️ Editar Promoción';
+    $('promocionId').value = promocion.id;
+    $('anio').value = promocion.anio;
+    $('descripcion').value = promocion.descripcion || '';
+    
+    abrirModal('modalPromocion');
+
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarAlerta('Error al cargar la promoción', 'danger');
+  }
+}
+
+async function guardarPromocion(event) {
+  if(event) event.preventDefault();
+  
+  const id = $('promocionId').value;
+  const anio = $('anio').value.trim();
+  const descripcion = $('descripcion').value.trim();
+
+  if (!anio) {
+    mostrarAlerta('El año es obligatorio', 'warning');
+    return;
+  }
+
+  const anioNum = parseInt(anio);
+  if (isNaN(anioNum) || anioNum < 2000 || anioNum > 2100) {
+    mostrarAlerta('El año debe estar entre 2000 y 2100', 'warning');
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem('token');
+    const url = id ? `${API_PROMOCIONES}/${id}` : API_PROMOCIONES;
+    const method = id ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ anio: anioNum, descripcion })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.msg || 'Error al guardar promoción');
+    }
+
+    mostrarAlerta(data.msg, 'success');
+    cerrarModal('modalPromocion');
+    cargarPromociones();
+    loadAll(); // Refrescar KPIs
+
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarAlerta(error.message, 'danger');
+  }
+}
+
+function mostrarModalEliminar(id, anio) {
+  $('idEliminar').value = id;
+  $('promocionEliminar').textContent = anio;
+  abrirModal('modalEliminar');
+}
+
+async function confirmarEliminar() {
+  const id = $('idEliminar').value;
+
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_PROMOCIONES}/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.msg || 'Error al eliminar promoción');
+    }
+
+    mostrarAlerta(data.msg, 'success');
+    cerrarModal('modalEliminar');
+    cargarPromociones();
+    loadAll(); // Refrescar KPIs
+
+  } catch (error) {
+    console.error('Error:', error);
+    mostrarAlerta(error.message, 'danger');
+  }
+}
+
+// ============================================
+// DESCARGAS
+// ============================================
 function descargarMemoriasPorFiltro(){
   const espId = $('selEsp').value;
   const promoId = $('selPromo').value;
@@ -238,6 +746,51 @@ function descargarExcelGeneral(){
   window.open('/api/descargas/excel', '_blank');
 }
 
+// ============================================
+// UTILIDADES
+// ============================================
+function abrirModal(modalId) {
+  $(modalId).classList.add('show');
+}
+
+function cerrarModal(modalId) {
+  $(modalId).classList.remove('show');
+}
+
+function mostrarAlerta(mensaje, tipo) {
+  const alertContainer = $('alertContainer');
+  const alert = document.createElement('div');
+  alert.className = `alert alert-${tipo}`;
+  
+  const iconos = {
+    'success': '✅',
+    'danger': '❌',
+    'warning': '⚠️',
+    'info': 'ℹ️'
+  };
+  
+  alert.innerHTML = `
+    <span>${iconos[tipo] || 'ℹ️'}</span>
+    <span>${mensaje}</span>
+  `;
+  
+  alertContainer.appendChild(alert);
+
+  setTimeout(() => {
+    alert.remove();
+  }, 5000);
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return 'N/A';
+  const date = new Date(fecha);
+  return date.toLocaleDateString('es-EC', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+}
+
 function escapeHtml(str){
   return String(str || '')
     .replaceAll('&','&amp;')
@@ -247,6 +800,16 @@ function escapeHtml(str){
     .replaceAll("'","&#039;");
 }
 
+// Cerrar modales al hacer clic fuera
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal')) {
+    e.target.classList.remove('show');
+  }
+});
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
 loadAll();
 </script>
 </body>

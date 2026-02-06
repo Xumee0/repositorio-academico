@@ -12,6 +12,7 @@ const archivoFinalRoutes = require('./routes/archivoFinal.routes');
 // Agregar nueva ruta
 const descargasRoutes = require('./routes/descargas.routes');
 const tutoresRoutes = require('./routes/tutores.routes');
+const promocionesRoutes = require('./routes/promociones.routes');
 
 const app = express();
 

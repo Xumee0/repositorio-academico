@@ -8,6 +8,7 @@ const ExcelJS = require('exceljs');
 
 // =====================================================
 // DESCARGAR TODOS LOS PDFs DE UNA ESPECIALIDAD Y PROMOCIÓN (ZIP)
+// (CORREGIDO PARA RAILWAY VOLUME EN /app/backend/src/uploads)
 // =====================================================
 router.get('/pdfs/:especialidad_id/:promocion_id', verifyToken, async (req, res) => {
   try {
@@ -50,38 +51,60 @@ router.get('/pdfs/:especialidad_id/:promocion_id', verifyToken, async (req, res)
     }
 
     // Crear ZIP
-    const archive = archiver('zip', {
-      zlib: { level: 9 }
-    });
+    const archive = archiver('zip', { zlib: { level: 9 } });
 
-    const nombreZip = `Memorias_Tecnicas_${info.especialidad.replace(/\s/g, '_')}_${info.promocion}.zip`;
-    res.attachment(nombreZip);
+    // Importante: el volumen está montado aquí en Railway
+    // /app/backend/src/uploads  (según tu captura)
+    const uploadsPath = process.env.UPLOADS_DIR
+      ? path.resolve(process.env.UPLOADS_DIR)
+      : '/app/backend/src/uploads';
+
+    console.log('ZIP uploadsPath =>', uploadsPath);
+
+    const nombreZip = `Memorias_Tecnicas_${String(info.especialidad).replace(/\s/g, '_')}_${info.promocion}.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${nombreZip}"`);
 
-    archive.pipe(res);
+    archive.on('error', (err) => {
+      console.error('Error archiver:', err);
+      if (!res.headersSent) res.status(500).json({ msg: 'Error al generar ZIP' });
+    });
 
-    const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
+    archive.pipe(res);
 
     let archivosAgregados = 0;
 
-    archivos.forEach((archivo, index) => {
-      const filePath = path.join(uploadsPath, archivo.nombre_archivo);
+    for (let index = 0; index < archivos.length; index++) {
+      const archivo = archivos[index];
+      if (!archivo.nombre_archivo) continue;
+
+      // Por si en DB viene "uploads/xxx.pdf"
+      const soloNombre = String(archivo.nombre_archivo).replace(/^uploads[\\/]/, '');
+      const filePath = path.join(uploadsPath, soloNombre);
 
       if (fs.existsSync(filePath)) {
-        const extension = path.extname(archivo.nombre_archivo);
+        const extension = path.extname(soloNombre) || '.pdf';
+
         const safeProyecto = String(archivo.proyecto || 'Proyecto')
-      .replace(/[\\/:*?"<>|]/g, '')
-      .trim();
+          .replace(/[\\/:*?"<>|]/g, '')
+          .trim()
+          .slice(0, 120);
 
-    const nombreEnZip = `${String(index + 1).padStart(3, '0')}_${safeProyecto}${extension}`;
-
-
+        const nombreEnZip = `${String(index + 1).padStart(3, '0')}_${safeProyecto}${extension}`;
         archive.file(filePath, { name: nombreEnZip });
         archivosAgregados++;
+      } else {
+        console.log('ZIP: NO EXISTE =>', filePath);
       }
-    });
+    }
+
+    // Si no hay ningún archivo físico, no mandes ZIP vacío
+    if (archivosAgregados === 0) {
+      return res.status(404).json({
+        msg: 'Hay registros en BD pero no se encontraron archivos en el volumen (/app/backend/src/uploads).'
+      });
+    }
 
     const readmeContent = `
 MEMORIAS TÉCNICAS

@@ -44,7 +44,6 @@ app.get('/', (req, res) => {
 // =========================
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', userRoutes);
-app.use('/api/cursos', cursosRoutes);
 app.use('/api/proyectos', proyectosRoutes);
 app.use('/api/notas', notasRoutes);
 app.use('/api/reportes', reportesRoutes);
@@ -54,5 +53,6 @@ app.use('/api/archivo-final', archivoFinalRoutes);
 // ... después de las demás rutas
 app.use('/api/descargas', descargasRoutes);
 app.use('/api/tutores', tutoresRoutes);
+app.use('/api/promociones', promocionesRoutes);
 
 module.exports = app;

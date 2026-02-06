@@ -38,8 +38,7 @@
     <!-- DASHBOARD -->
     <section id="home">
       <div class="grid">
-
-        <!-- ✅ NUEVO KPI: Promociones (evita el error kpiPromos null) -->
+        <!-- ✅ NUEVO: KPI Promociones (para que no sea null) -->
         <div class="card col-4">
           <h3>Promociones</h3>
           <div class="kpi" id="kpiPromos">—</div>
@@ -110,8 +109,9 @@
                   <th>Tema/Proyecto</th>
                   <th>Estado</th>
                   <th>Memoria Técnica</th>
-                  <!-- ✅ NUEVA COLUMNA -->
-                  <th style="min-width:170px;">Acciones</th>
+                  <!-- ❌ ELIMINADO: Calificar -->
+                  <!-- ✅ NUEVO -->
+                  <th style="min-width:180px;">Acciones</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -187,13 +187,13 @@
   </div>
 </div>
 
-<!-- ✅ NUEVO: Modal para editar proyecto -->
+<!-- ✅ NUEVO: Modal editar proyecto -->
 <div id="modalEditar" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
      background:rgba(0,0,0,0.7); z-index:1001; padding:40px;">
   <div class="card" style="max-width:560px; margin:auto;">
     <h3>Editar Proyecto</h3>
     <p style="color:var(--muted); font-size:13px;">
-      Estás editando: <strong id="editProyectoNombre"></strong>
+      Proyecto: <strong id="editProyectoNombre"></strong>
     </p>
 
     <input type="hidden" id="editProyectoId">
@@ -213,11 +213,11 @@
 
     <div style="height:10px"></div>
 
-    <label>Reemplazar / Subir PDF</label>
+    <label>Memoria Técnica (PDF)</label>
     <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">
-      Si eliges un PDF aquí, se subirá y reemplazará el actual.
+      Puedes subir/reemplazar el PDF o eliminar el actual.
     </div>
-    <input type="file" class="input" id="editArchivo" accept=".pdf">
+    <input type="file" class="input" id="editArchivo" accept=".pdf" onchange="mostrarInfoArchivoEdicion()">
     <div id="editArchivoInfo" style="color:var(--muted); font-size:12px; margin-top:6px;"></div>
 
     <div style="height:12px"></div>
@@ -361,15 +361,20 @@ function renderTabla(){
            Subir PDF
          </button>`;
 
+    return `
+      <tr>
+        <td><strong>${escapeHtml(x.tema_proyecto)}</strong></td>
+        <td>${statusBadge(x.estado)}</td>
+        <td>${archivoCell}</td>
 
-        <!-- ✅ NUEVO: Acciones -->
         <td>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn warning" onclick="abrirModalEditar(${x.proyecto_id})">Editar</button>
             <button class="btn danger" onclick="eliminarProyecto(${x.proyecto_id})">Eliminar</button>
           </div>
         </td>
-      
+      </tr>
+    `;
   }).join('');
 
   $('hint').textContent = rows.length
@@ -415,7 +420,10 @@ async function subirArchivo(){
   }
 }
 
-/* ✅ NUEVO: Editar / Eliminar proyecto y archivo */
+/* =========================
+   ✅ NUEVO: EDITAR / ELIMINAR
+========================= */
+
 function abrirModalEditar(proyectoId){
   const p = cache.proyectos.find(x => String(x.proyecto_id) === String(proyectoId));
   if(!p) return toast('Error', 'No se encontró el proyecto');
@@ -436,6 +444,20 @@ function abrirModalEditar(proyectoId){
 
 function cerrarModalEditar(){
   $('modalEditar').style.display = 'none';
+}
+
+function mostrarInfoArchivoEdicion(){
+  const archivo = $('editArchivo').files[0];
+  const info = $('editArchivoInfo');
+
+  if(archivo) {
+    const sizeMB = (archivo.size / 1024 / 1024).toFixed(2);
+    info.innerHTML = `
+      <span class="badge success">
+        📄 ${escapeHtml(archivo.name)} (${sizeMB} MB) listo para subir
+      </span>
+    `;
+  }
 }
 
 async function guardarEdicionProyecto(){
@@ -488,10 +510,7 @@ async function eliminarArchivoProyecto(){
     await apiFetch(`/archivo-final/${id}`, { method: 'DELETE' });
 
     toast('Éxito ✅', 'PDF eliminado');
-    // refrescar cache
     await cargarProyectos();
-
-    // reabrir modal con info actualizada
     abrirModalEditar(id);
 
   }catch(err){
@@ -506,7 +525,7 @@ async function eliminarProyectoDesdeModal(){
 
 async function eliminarProyecto(proyectoId, desdeModal=false){
   try{
-    if(!confirm('¿Eliminar este proyecto? (Esto lo quitará del sistema)')) return;
+    if(!confirm('¿Eliminar este proyecto? (Se quitará del sistema)')) return;
 
     await apiFetch(`/proyectos/${proyectoId}`, { method: 'DELETE' });
 
@@ -518,6 +537,10 @@ async function eliminarProyecto(proyectoId, desdeModal=false){
     toast('Error', err.message);
   }
 }
+
+/* =========================
+   CREAR PROYECTO (ORIGINAL)
+========================= */
 
 async function crearProyecto(){
   try{
@@ -619,9 +642,7 @@ async function descargarMemoriasTecnicas(){
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
 
     if (!response.ok) {
@@ -629,19 +650,15 @@ async function descargarMemoriasTecnicas(){
       throw new Error(error.msg || 'Error al descargar');
     }
 
-    // Obtener el blob (archivo ZIP)
     const blob = await response.blob();
 
-    // Obtener nombre del archivo del header Content-Disposition
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename = 'Memorias_Tecnicas.zip';
-
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="(.+)"/);
       if (match) filename = match[1];
     }
 
-    // Crear enlace de descarga
     const urlBlob = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = urlBlob;
@@ -649,7 +666,6 @@ async function descargarMemoriasTecnicas(){
     document.body.appendChild(a);
     a.click();
 
-    // Limpiar
     window.URL.revokeObjectURL(urlBlob);
     document.body.removeChild(a);
 

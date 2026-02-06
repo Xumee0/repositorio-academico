@@ -11,27 +11,44 @@ exports.upload = multer({ storage }).single('archivo');
 
 exports.subirOReemplazar = async (req, res) => {
   try {
-    if (req.user.rol !== 'estudiante') {
-      return res.status(403).json({ msg: 'Solo estudiantes pueden subir el proyecto final' });
-    }
-
+    const { rol, id: userId } = req.user;
     const { proyecto_id, nombre_visible } = req.body;
+
+    // Validaciones básicas
     if (!proyecto_id) return res.status(400).json({ msg: 'Falta proyecto_id' });
     if (!req.file) return res.status(400).json({ msg: 'Falta archivo' });
 
-    const [[p]] = await db.query(
-      'SELECT id, estudiante_id FROM proyectos WHERE id=? AND eliminado=0',
+    // Verificar que el proyecto existe
+    const [[proyecto]] = await db.query(
+      'SELECT id, tutor_id, estudiante_id FROM proyectos WHERE id=? AND eliminado=0',
       [proyecto_id]
     );
-    if (!p) return res.status(404).json({ msg: 'Proyecto no existe' });
-    if (p.estudiante_id !== req.user.id) return res.status(403).json({ msg: 'No autorizado' });
+
+    if (!proyecto) {
+      return res.status(404).json({ msg: 'Proyecto no existe' });
+    }
+
+    // Verificar permisos según el rol
+    let autorizado = false;
+
+    if (rol === 'estudiante') {
+      autorizado = proyecto.estudiante_id === userId;
+    } else if (rol === 'tutor') {
+      autorizado = proyecto.tutor_id === userId;
+    } else if (rol === 'admin') {
+      autorizado = true;
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({ msg: 'No tienes permiso para subir archivo a este proyecto' });
+    }
 
     const nombreArchivo = req.file.filename;
     const nombreVisible = (nombre_visible && nombre_visible.trim()) || req.file.originalname;
 
+    // Insertar o actualizar archivo
     await db.query(
-      `
-      INSERT INTO archivo_final
+      `INSERT INTO archivo_final
         (proyecto_id, subido_por, nombre_visible, nombre_archivo, mime_type, tamano_bytes, eliminado)
       VALUES (?,?,?,?,?,?,0)
       ON DUPLICATE KEY UPDATE
@@ -41,37 +58,56 @@ exports.subirOReemplazar = async (req, res) => {
         mime_type=VALUES(mime_type),
         tamano_bytes=VALUES(tamano_bytes),
         eliminado=0,
-        updated_at=CURRENT_TIMESTAMP
-      `,
-      [proyecto_id, req.user.id, nombreVisible, nombreArchivo, req.file.mimetype || null, req.file.size || null]
+        updated_at=CURRENT_TIMESTAMP`,
+      [proyecto_id, userId, nombreVisible, nombreArchivo, req.file.mimetype || null, req.file.size || null]
     );
 
-    await db.query(`UPDATE proyectos SET estado='finalizado', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [proyecto_id]);
+    await db.query(
+      `UPDATE proyectos SET estado='finalizado', updated_at=CURRENT_TIMESTAMP WHERE id=?`, 
+      [proyecto_id]
+    );
 
-    res.json({ msg: 'Archivo final guardado/reemplazado', proyecto_id });
+    res.json({ 
+      msg: 'Archivo final guardado correctamente', 
+      proyecto_id,
+      nombre_archivo: nombreVisible
+    });
+
   } catch (e) {
-    console.error(e);
+    console.error('Error al subir archivo:', e);
     res.status(500).json({ msg: 'Error al subir archivo final' });
   }
 };
 
 exports.renombrar = async (req, res) => {
   try {
-    if (req.user.rol !== 'estudiante') return res.status(403).json({ msg: 'Solo estudiantes pueden renombrar' });
-
+    const { rol, id: userId } = req.user;
     const { proyecto_id } = req.params;
     const { nombre_visible } = req.body;
-    if (!nombre_visible?.trim()) return res.status(400).json({ msg: 'Falta nombre_visible' });
+
+    if (!nombre_visible?.trim()) {
+      return res.status(400).json({ msg: 'Falta nombre_visible' });
+    }
 
     const [[row]] = await db.query(`
-      SELECT af.id, p.estudiante_id
+      SELECT af.id, p.tutor_id, p.estudiante_id
       FROM archivo_final af
       JOIN proyectos p ON p.id = af.proyecto_id
       WHERE af.proyecto_id=? AND af.eliminado=0
     `, [proyecto_id]);
 
-    if (!row) return res.status(404).json({ msg: 'No hay archivo final' });
-    if (row.estudiante_id !== req.user.id) return res.status(403).json({ msg: 'No autorizado' });
+    if (!row) {
+      return res.status(404).json({ msg: 'No hay archivo final' });
+    }
+
+    let autorizado = false;
+    if (rol === 'estudiante') autorizado = row.estudiante_id === userId;
+    else if (rol === 'tutor') autorizado = row.tutor_id === userId;
+    else if (rol === 'admin') autorizado = true;
+
+    if (!autorizado) {
+      return res.status(403).json({ msg: 'No autorizado' });
+    }
 
     await db.query(
       `UPDATE archivo_final SET nombre_visible=?, updated_at=CURRENT_TIMESTAMP WHERE proyecto_id=?`,
@@ -79,34 +115,52 @@ exports.renombrar = async (req, res) => {
     );
 
     res.json({ msg: 'Nombre actualizado' });
+
   } catch (e) {
-    console.error(e);
+    console.error('Error al renombrar:', e);
     res.status(500).json({ msg: 'Error al renombrar' });
   }
 };
 
 exports.eliminar = async (req, res) => {
   try {
-    if (req.user.rol !== 'estudiante') return res.status(403).json({ msg: 'Solo estudiantes pueden eliminar' });
-
+    const { rol, id: userId } = req.user;
     const { proyecto_id } = req.params;
 
     const [[row]] = await db.query(`
-      SELECT af.id, p.estudiante_id
+      SELECT af.id, p.tutor_id, p.estudiante_id
       FROM archivo_final af
       JOIN proyectos p ON p.id = af.proyecto_id
       WHERE af.proyecto_id=? AND af.eliminado=0
     `, [proyecto_id]);
 
-    if (!row) return res.status(404).json({ msg: 'No hay archivo final' });
-    if (row.estudiante_id !== req.user.id) return res.status(403).json({ msg: 'No autorizado' });
+    if (!row) {
+      return res.status(404).json({ msg: 'No hay archivo final' });
+    }
 
-    await db.query(`UPDATE archivo_final SET eliminado=1, updated_at=CURRENT_TIMESTAMP WHERE proyecto_id=?`, [proyecto_id]);
-    await db.query(`UPDATE proyectos SET estado='en_proceso', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [proyecto_id]);
+    let autorizado = false;
+    if (rol === 'estudiante') autorizado = row.estudiante_id === userId;
+    else if (rol === 'tutor') autorizado = row.tutor_id === userId;
+    else if (rol === 'admin') autorizado = true;
 
-    res.json({ msg: 'Archivo final marcado como eliminado' });
+    if (!autorizado) {
+      return res.status(403).json({ msg: 'No autorizado' });
+    }
+
+    await db.query(
+      `UPDATE archivo_final SET eliminado=1, updated_at=CURRENT_TIMESTAMP WHERE proyecto_id=?`, 
+      [proyecto_id]
+    );
+
+    await db.query(
+      `UPDATE proyectos SET estado='en_proceso', updated_at=CURRENT_TIMESTAMP WHERE id=?`, 
+      [proyecto_id]
+    );
+
+    res.json({ msg: 'Archivo eliminado' });
+
   } catch (e) {
-    console.error(e);
+    console.error('Error al eliminar:', e);
     res.status(500).json({ msg: 'Error al eliminar' });
   }
 };
@@ -117,40 +171,58 @@ exports.listar = async (req, res) => {
 
     if (rol === 'admin' || rol === 'secretaria') {
       const [rows] = await db.query(`
-        SELECT af.*, p.titulo AS proyecto_titulo, u.nombre AS estudiante
+        SELECT 
+          af.*,
+          p.titulo AS proyecto_titulo,
+          COALESCE(u_est.nombre, 'Sin estudiante') AS estudiante,
+          u_tutor.nombre AS tutor,
+          pr.anio AS promocion,
+          e.nombre AS especialidad
         FROM archivo_final af
         JOIN proyectos p ON p.id = af.proyecto_id
-        JOIN usuarios u ON u.id = p.estudiante_id
+        LEFT JOIN usuarios u_est ON u_est.id = p.estudiante_id
+        JOIN usuarios u_tutor ON u_tutor.id = p.tutor_id
+        JOIN promociones pr ON pr.id = p.promocion_id
+        JOIN especialidades e ON e.id = p.especialidad_id
         WHERE af.eliminado=0 AND p.eliminado=0
-        ORDER BY af.updated_at DESC, af.created_at DESC
+        ORDER BY af.updated_at DESC
       `);
       return res.json(rows);
     }
 
     if (rol === 'tutor') {
       const [rows] = await db.query(`
-        SELECT af.*, p.titulo AS proyecto_titulo, u.nombre AS estudiante
+        SELECT 
+          af.*,
+          p.titulo AS proyecto_titulo,
+          COALESCE(u_est.nombre, 'Sin estudiante') AS estudiante,
+          pr.anio AS promocion,
+          e.nombre AS especialidad
         FROM archivo_final af
         JOIN proyectos p ON p.id = af.proyecto_id
-        JOIN usuarios u ON u.id = p.estudiante_id
-        JOIN tutor_curso dc ON dc.curso_id = p.curso_id
-        WHERE dc.tutor_id=? AND af.eliminado=0 AND p.eliminado=0
-        ORDER BY af.updated_at DESC, af.created_at DESC
+        LEFT JOIN usuarios u_est ON u_est.id = p.estudiante_id
+        JOIN promociones pr ON pr.id = p.promocion_id
+        JOIN especialidades e ON e.id = p.especialidad_id
+        WHERE p.tutor_id=? AND af.eliminado=0 AND p.eliminado=0
+        ORDER BY af.updated_at DESC
       `, [id]);
       return res.json(rows);
     }
 
     const [rows] = await db.query(`
-      SELECT af.*, p.titulo AS proyecto_titulo
+      SELECT 
+        af.*,
+        p.titulo AS proyecto_titulo
       FROM archivo_final af
       JOIN proyectos p ON p.id = af.proyecto_id
       WHERE p.estudiante_id=? AND af.eliminado=0 AND p.eliminado=0
-      ORDER BY af.updated_at DESC, af.created_at DESC
+      ORDER BY af.updated_at DESC
     `, [id]);
 
     return res.json(rows);
+
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ msg: 'Error al listar archivo final' });
+    console.error('Error al listar:', e);
+    res.status(500).json({ msg: 'Error al listar archivos' });
   }
 };

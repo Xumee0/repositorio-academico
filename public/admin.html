@@ -701,11 +701,13 @@ function descargarMemoriasPorFiltro(){
     return toast('Error', 'Selecciona especialidad y promoción');
   }
   
-  window.open(`/api/descargas/pdfs/${espId}/${promoId}`, '_blank');
+  const token = localStorage.getItem('token');
+  window.open(`/api/descargas/pdfs/${espId}/${promoId}?token=${encodeURIComponent(token)}`, '_blank');
 }
 
 function descargarExcelGeneral(){
-  window.open('/api/descargas/excel', '_blank');
+  const token = localStorage.getItem('token');
+  window.open(`/api/descargas/excel?token=${encodeURIComponent(token)}`, '_blank');
 }
 
 // ============================================

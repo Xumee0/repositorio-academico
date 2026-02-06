@@ -31,6 +31,7 @@
         <span style="color:var(--muted)">🔎</span>
         <input id="q" placeholder="Buscar tema/proyecto..." oninput="renderTabla()">
       </div>
+      <div class="pill">📚 Tutor</div>
       <button class="btn warning" onclick="toggleTheme()">🌓 Tema</button>
     </div>
 
@@ -145,7 +146,7 @@
         <textarea class="input" id="descripcionNuevo" rows="3" 
                   placeholder="Breve descripción del proyecto..."></textarea>
 
-        <label>Memoria Técnica (PDF)</label>
+        <label>Memoria Técnica (PDF) - <span style="color:red;">OBLIGATORIO</span></label>
         <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">
         </div>
         <input type="file" class="input" id="archivoNuevo" accept=".pdf" onchange="mostrarInfoArchivo()">
@@ -405,8 +406,8 @@ async function crearProyecto(){
     const descripcion = $('descripcionNuevo').value.trim();
     const archivo = $('archivoNuevo').files[0];
 
-    if(!promocion_id || !especialidad_id || !titulo) {
-      return toast('Error', 'Completa los campos requeridos (promoción, especialidad y título)');
+    if(!promocion_id || !especialidad_id || !titulo || !archivo) {
+      return toast('Error', 'Completa todos los campos incluyendo el archivo PDF');
     }
 
     // Deshabilitar botón mientras se procesa
@@ -420,28 +421,24 @@ async function crearProyecto(){
       body: { promocion_id, especialidad_id, titulo, descripcion }
     });
 
-    // 2. Si hay archivo, subirlo
-    if(archivo) {
-      btn.textContent = 'Subiendo archivo...';
-      
-      const formData = new FormData();
-      formData.append('archivo', archivo);
-      formData.append('proyecto_id', proyecto.id);
+    // 2. Subir el archivo (OBLIGATORIO)
+    btn.textContent = 'Subiendo archivo...';
+    
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    formData.append('proyecto_id', proyecto.id);
 
-      const resp = await fetch(`${API_BASE}/archivo-final`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getToken()}` },
-        body: formData
-      });
+    const resp = await fetch(`${API_BASE}/archivo-final`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
 
-      if(!resp.ok) {
-        toast('Advertencia ⚠️', 'Proyecto creado pero falló subir el archivo. Súbelo desde "Proyectos"');
-      } else {
-        toast('Éxito ✅', 'Proyecto creado y archivo subido correctamente');
-      }
-    } else {
-      toast('Éxito ✅', 'Proyecto creado correctamente');
+    if(!resp.ok) {
+      throw new Error('No se pudo subir el archivo. El proyecto fue creado pero debes subir el PDF.');
     }
+    
+    toast('Éxito ✅', 'Proyecto creado y archivo subido correctamente');
 
     // Limpiar formulario y recargar
     limpiarFormulario();

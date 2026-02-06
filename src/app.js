@@ -5,7 +5,6 @@ const path = require('path');
 // Importación de rutas
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/usuarios.routes');
-const cursosRoutes = require('./routes/cursos.routes');
 const proyectosRoutes = require('./routes/proyectos.routes');
 const notasRoutes = require('./routes/notas.routes');
 const reportesRoutes = require('./routes/reportes.routes');

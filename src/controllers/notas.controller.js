@@ -1,9 +1,12 @@
 const db = require('../config/database');
 
+// =====================================================
+// GUARDAR/ACTUALIZAR NOTA
+// =====================================================
 exports.guardarNota = async (req, res) => {
   try {
     if (req.user.rol !== 'tutor') {
-      return res.status(403).json({ msg: 'Solo tutor pueden calificar' });
+      return res.status(403).json({ msg: 'Solo tutores pueden calificar' });
     }
 
     const { proyecto_id, calificacion, observaciones } = req.body;
@@ -13,76 +16,72 @@ exports.guardarNota = async (req, res) => {
       return res.status(400).json({ msg: 'Faltan datos (proyecto_id, calificacion)' });
     }
 
-    // Verificar que el proyecto exista y que el curso esté asignado al tutor
+    // Verificar que el proyecto existe y pertenece a este tutor
     const [[proyecto]] = await db.query(
-      'SELECT curso_id, estudiante_id FROM proyectos WHERE id=? AND eliminado=0',
+      'SELECT id, tutor_id FROM proyectos WHERE id=? AND eliminado=0',
       [proyecto_id]
     );
-    if (!proyecto) return res.status(404).json({ msg: 'Proyecto no existe' });
 
-    const [[asignado]] = await db.query(
-      'SELECT id FROM tutor_curso WHERE tutor_id=? AND curso_id=?',
-      [tutor_id, proyecto.curso_id]
-    );
-    if (!asignado) return res.status(403).json({ msg: 'No tienes asignado este curso' });
+    if (!proyecto) {
+      return res.status(404).json({ msg: 'Proyecto no existe' });
+    }
+
+    // El tutor solo puede calificar sus propios proyectos
+    if (proyecto.tutor_id !== tutor_id) {
+      return res.status(403).json({ msg: 'No tienes permiso para calificar este proyecto' });
+    }
 
     // INSERT o UPDATE automático (por UNIQUE uq_nota_tutor_proyecto)
     await db.query(
-      `
-      INSERT INTO notas (proyecto_id, tutor_id, calificacion, observaciones)
+      `INSERT INTO notas (proyecto_id, tutor_id, calificacion, observaciones)
       VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         calificacion = VALUES(calificacion),
         observaciones = VALUES(observaciones),
-        updated_at = CURRENT_TIMESTAMP
-      `,
+        updated_at = CURRENT_TIMESTAMP`,
       [proyecto_id, tutor_id, calificacion, observaciones || null]
     );
 
-    // (Opcional) marcar estado aprobado si quieres que la nota "cierre" el proyecto
-    // await db.query(`UPDATE proyectos SET estado='aprobado', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [proyecto_id]);
-
     res.json({ msg: 'Nota guardada correctamente' });
+
   } catch (error) {
-    console.error(error);
+    console.error('Error al guardar nota:', error);
     res.status(500).json({ msg: 'Error al guardar nota' });
   }
 };
 
+// =====================================================
+// VER NOTAS DE UN PROYECTO
+// =====================================================
 exports.verNotasProyecto = async (req, res) => {
   try {
     const proyecto_id = req.params.id;
     const { id: userId, rol } = req.user;
 
+    // Verificar que el proyecto existe
     const [[proyecto]] = await db.query(
-      'SELECT estudiante_id, curso_id FROM proyectos WHERE id=? AND eliminado=0',
+      'SELECT id, tutor_id FROM proyectos WHERE id=? AND eliminado=0',
       [proyecto_id]
     );
-    if (!proyecto) return res.status(404).json({ msg: 'Proyecto no existe' });
+
+    if (!proyecto) {
+      return res.status(404).json({ msg: 'Proyecto no existe' });
+    }
 
     // Permisos:
-    // - estudiante: solo su proyecto
-    // - tutor: solo si está asignado al curso
-    // - admin/secretaria: todo
-    if (rol === 'estudiante' && proyecto.estudiante_id !== userId) {
+    // - tutor: solo su proyecto
+    // - admin: todos
+    if (rol === 'tutor' && proyecto.tutor_id !== userId) {
       return res.status(403).json({ msg: 'No autorizado' });
     }
 
-    if (rol === 'tutor') {
-      const [[asignado]] = await db.query(
-        'SELECT id FROM tutor_curso WHERE tutor_id=? AND curso_id=?',
-        [userId, proyecto.curso_id]
-      );
-      if (!asignado) return res.status(403).json({ msg: 'No autorizado' });
-    }
-
-    if (!['admin','secretaria','tutor','estudiante'].includes(rol)) {
+    if (!['admin', 'tutor'].includes(rol)) {
       return res.status(403).json({ msg: 'No autorizado' });
     }
 
+    // Obtener notas del proyecto
     const [rows] = await db.query(
-      `
-      SELECT 
+      `SELECT 
         n.id,
         n.calificacion,
         n.observaciones,
@@ -91,14 +90,14 @@ exports.verNotasProyecto = async (req, res) => {
       FROM notas n
       JOIN usuarios u ON u.id = n.tutor_id
       WHERE n.proyecto_id = ?
-      ORDER BY n.updated_at DESC
-      `,
+      ORDER BY n.updated_at DESC`,
       [proyecto_id]
     );
 
     res.json(rows);
+
   } catch (error) {
-    console.error(error);
+    console.error('Error al obtener notas:', error);
     res.status(500).json({ msg: 'Error al obtener notas' });
   }
 };

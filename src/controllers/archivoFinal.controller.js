@@ -14,13 +14,11 @@ exports.subirOReemplazar = async (req, res) => {
     const { rol, id: userId } = req.user;
     const { proyecto_id, nombre_visible } = req.body;
 
-    // Validaciones básicas
     if (!proyecto_id) return res.status(400).json({ msg: 'Falta proyecto_id' });
     if (!req.file) return res.status(400).json({ msg: 'Falta archivo' });
 
-    // Verificar que el proyecto existe
     const [[proyecto]] = await db.query(
-      'SELECT id, tutor_id, estudiante_id FROM proyectos WHERE id=? AND eliminado=0',
+      'SELECT id, tutor_id FROM proyectos WHERE id=? AND eliminado=0',
       [proyecto_id]
     );
 
@@ -28,12 +26,8 @@ exports.subirOReemplazar = async (req, res) => {
       return res.status(404).json({ msg: 'Proyecto no existe' });
     }
 
-    // Verificar permisos según el rol
     let autorizado = false;
-
-    if (rol === 'estudiante') {
-      autorizado = proyecto.estudiante_id === userId;
-    } else if (rol === 'tutor') {
+    if (rol === 'tutor') {
       autorizado = proyecto.tutor_id === userId;
     } else if (rol === 'admin') {
       autorizado = true;
@@ -46,7 +40,6 @@ exports.subirOReemplazar = async (req, res) => {
     const nombreArchivo = req.file.filename;
     const nombreVisible = (nombre_visible && nombre_visible.trim()) || req.file.originalname;
 
-    // Insertar o actualizar archivo
     await db.query(
       `INSERT INTO archivo_final
         (proyecto_id, subido_por, nombre_visible, nombre_archivo, mime_type, tamano_bytes, eliminado)
@@ -90,7 +83,7 @@ exports.renombrar = async (req, res) => {
     }
 
     const [[row]] = await db.query(`
-      SELECT af.id, p.tutor_id, p.estudiante_id
+      SELECT af.id, p.tutor_id
       FROM archivo_final af
       JOIN proyectos p ON p.id = af.proyecto_id
       WHERE af.proyecto_id=? AND af.eliminado=0
@@ -101,8 +94,7 @@ exports.renombrar = async (req, res) => {
     }
 
     let autorizado = false;
-    if (rol === 'estudiante') autorizado = row.estudiante_id === userId;
-    else if (rol === 'tutor') autorizado = row.tutor_id === userId;
+    if (rol === 'tutor') autorizado = row.tutor_id === userId;
     else if (rol === 'admin') autorizado = true;
 
     if (!autorizado) {
@@ -128,7 +120,7 @@ exports.eliminar = async (req, res) => {
     const { proyecto_id } = req.params;
 
     const [[row]] = await db.query(`
-      SELECT af.id, p.tutor_id, p.estudiante_id
+      SELECT af.id, p.tutor_id
       FROM archivo_final af
       JOIN proyectos p ON p.id = af.proyecto_id
       WHERE af.proyecto_id=? AND af.eliminado=0
@@ -139,8 +131,7 @@ exports.eliminar = async (req, res) => {
     }
 
     let autorizado = false;
-    if (rol === 'estudiante') autorizado = row.estudiante_id === userId;
-    else if (rol === 'tutor') autorizado = row.tutor_id === userId;
+    if (rol === 'tutor') autorizado = row.tutor_id === userId;
     else if (rol === 'admin') autorizado = true;
 
     if (!autorizado) {
@@ -169,18 +160,16 @@ exports.listar = async (req, res) => {
   try {
     const { id, rol } = req.user;
 
-    if (rol === 'admin' || rol === 'secretaria') {
+    if (rol === 'admin') {
       const [rows] = await db.query(`
         SELECT 
           af.*,
           p.titulo AS proyecto_titulo,
-          COALESCE(u_est.nombre, 'Sin estudiante') AS estudiante,
           u_tutor.nombre AS tutor,
           pr.anio AS promocion,
           e.nombre AS especialidad
         FROM archivo_final af
         JOIN proyectos p ON p.id = af.proyecto_id
-        LEFT JOIN usuarios u_est ON u_est.id = p.estudiante_id
         JOIN usuarios u_tutor ON u_tutor.id = p.tutor_id
         JOIN promociones pr ON pr.id = p.promocion_id
         JOIN especialidades e ON e.id = p.especialidad_id
@@ -195,12 +184,10 @@ exports.listar = async (req, res) => {
         SELECT 
           af.*,
           p.titulo AS proyecto_titulo,
-          COALESCE(u_est.nombre, 'Sin estudiante') AS estudiante,
           pr.anio AS promocion,
           e.nombre AS especialidad
         FROM archivo_final af
         JOIN proyectos p ON p.id = af.proyecto_id
-        LEFT JOIN usuarios u_est ON u_est.id = p.estudiante_id
         JOIN promociones pr ON pr.id = p.promocion_id
         JOIN especialidades e ON e.id = p.especialidad_id
         WHERE p.tutor_id=? AND af.eliminado=0 AND p.eliminado=0
@@ -209,17 +196,7 @@ exports.listar = async (req, res) => {
       return res.json(rows);
     }
 
-    const [rows] = await db.query(`
-      SELECT 
-        af.*,
-        p.titulo AS proyecto_titulo
-      FROM archivo_final af
-      JOIN proyectos p ON p.id = af.proyecto_id
-      WHERE p.estudiante_id=? AND af.eliminado=0 AND p.eliminado=0
-      ORDER BY af.updated_at DESC
-    `, [id]);
-
-    return res.json(rows);
+    return res.status(403).json({ msg: 'Acceso denegado' });
 
   } catch (e) {
     console.error('Error al listar:', e);

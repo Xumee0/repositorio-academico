@@ -214,9 +214,14 @@ async function loadInicial(){
     
     // Cargar estadísticas
     const stats = await apiFetch('/tutores/estadisticas');
-    $('kpiPromos').textContent = stats.total_promociones;
-    $('kpiProy').textContent = stats.total_proyectos;
-    $('kpiFiles').textContent = stats.proyectos_con_archivo;
+
+    const elPromos = $('kpiPromos');
+    const elProy   = $('kpiProy');
+    const elFiles  = $('kpiFiles');
+
+if (elPromos) elPromos.textContent = stats.total_promociones;
+if (elProy)   elProy.textContent   = stats.total_proyectos;
+if (elFiles)  elFiles.textContent  = stats.proyectos_con_archivo;
 
     // Llenar selectores
     llenarSelectores();

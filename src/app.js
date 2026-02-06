@@ -1,18 +1,31 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 // Importación de rutas
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/usuarios.routes');
 const proyectosRoutes = require('./routes/proyectos.routes');
 const archivoFinalRoutes = require('./routes/archivoFinal.routes');
-// Agregar nueva ruta
 const descargasRoutes = require('./routes/descargas.routes');
 const tutoresRoutes = require('./routes/tutores.routes');
 const promocionesRoutes = require('./routes/promociones.routes');
 
 const app = express();
+
+// =========================
+// ✅ UPLOADS DIR (MISMO PARA TODO)
+// =========================
+const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : '/app/backend/src/uploads';
+
+// Asegurar carpeta (para Railway volume)
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+console.log('APP UPLOADS_DIR =>', UPLOADS_DIR);
 
 // =========================
 // MIDDLEWARES
@@ -27,9 +40,8 @@ app.use(express.json());
 // Frontend HTML
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Uploads
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
-
+// ✅ Uploads (sirve exactamente el volumen)
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // =========================
 // RUTA RAÍZ
@@ -46,8 +58,6 @@ app.use('/api/usuarios', userRoutes);
 app.use('/api/proyectos', proyectosRoutes);
 app.use('/api/archivo-final', archivoFinalRoutes);
 
-
-// ... después de las demás rutas
 app.use('/api/descargas', descargasRoutes);
 app.use('/api/tutores', tutoresRoutes);
 app.use('/api/promociones', promocionesRoutes);

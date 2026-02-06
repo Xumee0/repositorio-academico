@@ -1,9 +1,27 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const db = require('../config/database');
 
+// =====================================================
+// ✅ CONSTANTE GLOBAL PARA UPLOADS (VOLUMEN RAILWAY)
+// =====================================================
+const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : '/app/backend/src/uploads';
+
+// Asegurar que exista el directorio
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+console.log('UPLOADS_DIR =>', UPLOADS_DIR);
+
+// =====================================================
+// ✅ MULTER GUARDANDO EN EL DIRECTORIO CORRECTO
+// =====================================================
 const storage = multer.diskStorage({
-  destination: 'src/uploads/',
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 
@@ -56,12 +74,12 @@ exports.subirOReemplazar = async (req, res) => {
     );
 
     await db.query(
-      `UPDATE proyectos SET estado='finalizado', updated_at=CURRENT_TIMESTAMP WHERE id=?`, 
+      `UPDATE proyectos SET estado='finalizado', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
       [proyecto_id]
     );
 
-    res.json({ 
-      msg: 'Archivo final guardado correctamente', 
+    res.json({
+      msg: 'Archivo final guardado correctamente',
       proyecto_id,
       nombre_archivo: nombreVisible
     });
@@ -139,12 +157,12 @@ exports.eliminar = async (req, res) => {
     }
 
     await db.query(
-      `UPDATE archivo_final SET eliminado=1, updated_at=CURRENT_TIMESTAMP WHERE proyecto_id=?`, 
+      `UPDATE archivo_final SET eliminado=1, updated_at=CURRENT_TIMESTAMP WHERE proyecto_id=?`,
       [proyecto_id]
     );
 
     await db.query(
-      `UPDATE proyectos SET estado='en_proceso', updated_at=CURRENT_TIMESTAMP WHERE id=?`, 
+      `UPDATE proyectos SET estado='en_proceso', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
       [proyecto_id]
     );
 

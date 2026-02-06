@@ -23,18 +23,18 @@ router.get('/', verifyToken, async (req, res) => {
       return res.json(rows);
     }
 
-    if (rol === 'docente') {
+    if (rol === 'tutor') {
       const [rows] = await db.query(`
         SELECT 
           c.id,
           CONCAT(c.nombre,' ',c.paralelo) AS nombre,
           pr.anio AS promocion,
           e.nombre AS especialidad
-        FROM docente_curso dc
-        JOIN cursos c ON c.id = dc.curso_id
+        FROM tutor_curso tc
+        JOIN cursos c ON c.id = tc.curso_id
         JOIN promociones pr ON pr.id = c.promocion_id
         JOIN especialidades e ON e.id = c.especialidad_id
-        WHERE dc.docente_id=?
+        WHERE tc.tutor_id=?
         ORDER BY pr.anio DESC, e.nombre, c.nombre, c.paralelo
       `, [id]);
       return res.json(rows);

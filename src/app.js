@@ -10,7 +10,6 @@ const proyectosRoutes = require('./routes/proyectos.routes');
 const notasRoutes = require('./routes/notas.routes');
 const reportesRoutes = require('./routes/reportes.routes');
 const archivoFinalRoutes = require('./routes/archivoFinal.routes');
-const docenteRoutes = require('./routes/docente.routes');
 // Agregar nueva ruta
 const descargasRoutes = require('./routes/descargas.routes');
 const tutoresRoutes = require('./routes/tutores.routes');
@@ -50,7 +49,6 @@ app.use('/api/proyectos', proyectosRoutes);
 app.use('/api/notas', notasRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/archivo-final', archivoFinalRoutes);
-app.use('/api/docente', docenteRoutes);
 
 
 // ... después de las demás rutas

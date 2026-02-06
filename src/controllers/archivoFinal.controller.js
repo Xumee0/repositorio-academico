@@ -127,14 +127,14 @@ exports.listar = async (req, res) => {
       return res.json(rows);
     }
 
-    if (rol === 'docente') {
+    if (rol === 'tutor') {
       const [rows] = await db.query(`
         SELECT af.*, p.titulo AS proyecto_titulo, u.nombre AS estudiante
         FROM archivo_final af
         JOIN proyectos p ON p.id = af.proyecto_id
         JOIN usuarios u ON u.id = p.estudiante_id
-        JOIN docente_curso dc ON dc.curso_id = p.curso_id
-        WHERE dc.docente_id=? AND af.eliminado=0 AND p.eliminado=0
+        JOIN tutor_curso dc ON dc.curso_id = p.curso_id
+        WHERE dc.tutor_id=? AND af.eliminado=0 AND p.eliminado=0
         ORDER BY af.updated_at DESC, af.created_at DESC
       `, [id]);
       return res.json(rows);

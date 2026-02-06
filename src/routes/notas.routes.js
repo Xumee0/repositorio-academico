@@ -4,7 +4,7 @@ const { verifyToken } = require('../middlewares/auth');
 
 
 
-// Crear o actualizar nota (docente)
+// Crear o actualizar nota (tutor)
 router.post('/', verifyToken, ctrl.guardarNota);
 
 // Ver notas de un proyecto
